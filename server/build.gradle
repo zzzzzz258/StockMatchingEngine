@@ -3,7 +3,7 @@
  */
 
 plugins {
-    id 'edu.duke.ece651.mp.java-application-conventions'
+    id 'edu.duke.ece568.em.java-application-conventions'
 }
 
 dependencies {
@@ -13,16 +13,24 @@ dependencies {
     testImplementation 'org.junit.platform:junit-platform-launcher:1.6.2'
     // This dependency is used by the application.
     implementation 'com.google.guava:guava:30.1.1-jre'
+    implementation group:'org.mybatis', name:'mybatis', version:'3.5.9'
+    runtimeOnly group:'org.postgresql', name:'postgresql', version:'42.3.3'
 
 }
 
 application {
     // Define the main class for the application.
-    mainClass = 'edu.duke.ece651.mp.server.Server'
+    mainClass = 'edu.duke.ece568.em.server.Server'
 }
 tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+}
+task ensureResources() {
+  doLast {
+     String resourcesDir - "$projectDir/src/main/resources"
+     mkdir "$resourcesDir"
+  }
 }
 test{
     testLogging{

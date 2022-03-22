@@ -1,4 +1,4 @@
-package edu.duke.ece651.mp.common;
+package edu.duke.ece568.em.common;
 
 public class Thing {
   private String name;

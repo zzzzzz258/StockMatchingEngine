@@ -4,7 +4,7 @@
 
 plugins {
     // Apply the common convention plugin for shared build configuration between library and application projects.
-    id 'edu.duke.ece651.mp.java-common-conventions'
+    id 'edu.duke.ece568.em.java-common-conventions'
 
     // Apply the application plugin to add support for building a CLI application in Java.
     id 'application'

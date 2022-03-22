@@ -3,7 +3,7 @@
  */
 
 plugins {
-    id 'edu.duke.ece651.mp.java-library-conventions'
+    id 'edu.duke.ece568.em.java-library-conventions'
 }
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.2'

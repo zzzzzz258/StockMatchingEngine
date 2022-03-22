@@ -3,7 +3,7 @@
  */
 
 plugins {
-    id 'edu.duke.ece651.mp.java-application-conventions'
+    id 'edu.duke.ece568.em.java-application-conventions'
 }
 
 dependencies {
@@ -18,7 +18,7 @@ dependencies {
 
 application {
     // Define the main class for the application.
-    mainClass = 'edu.duke.ece651.mp.client.Client'
+    mainClass = 'edu.duke.ece568.em.client.Client'
 }
 tasks.named('test') {
     // Use JUnit Platform for unit tests.
