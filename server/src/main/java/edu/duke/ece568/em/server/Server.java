@@ -1,7 +1,7 @@
 package edu.duke.ece568.em.server;
 
-import java.io.IOException;
 import java.io.InputStream;
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
@@ -88,12 +88,13 @@ public class Server {
     // simple test case for mybatis ORM
     SqlSessionFactory sqlSessionFactory = getSqlSessionFactory();
     try (SqlSession session = sqlSessionFactory.openSession()) {
-      BoxMapper mapper = session.getMapper(BoxMapper.class);
-      mapper.deleteAll();
-      mapper.addBox(15);
+      AccountMapper accountMapper = session.getMapper(AccountMapper.class);
+      PositionMapper positionMapper = session.getMapper(PositionMapper.class);
+      OrderMapper orderMapper = session.getMapper(OrderMapper.class);
+
+      // TODO: write operations to SB here
 
       session.commit();
-      System.out.println("Add a box");
     }
 
   }
@@ -104,14 +105,20 @@ public class Server {
    * @return {@link SqlSessionFactory}
    */
   public static SqlSessionFactory getSqlSessionFactory() {
-    DataSource dataSource = MyDataSourceFactory.getDataSource("org.postgresql.Driver", "jdbc:postgresql:test_db",
-        "postgres", "ece568hw4"); // TODO: update the arguments after creating tables
-
-    TransactionFactory transactionFactory = new JdbcTransactionFactory();
-    Environment environment = new Environment("development", transactionFactory, dataSource);
+    DataSource dataSource = MyDataSourceFactory.getDataSource("org.postgresql.Driver", "jdbc:postgresql:stock_market", "postgres", "ece568hw4"); 
+    
+    TransactionFactory transactionFactory =
+      new JdbcTransactionFactory();
+    Environment environment =
+      new Environment("development", transactionFactory, dataSource);
     Configuration configuration = new Configuration(environment);
-    configuration.addMapper(BoxMapper.class);
-    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(configuration);
+    configuration.addMapper(AccountMapper.class);
+    configuration.addMapper(PositionMapper.class);
+    configuration.addMapper(OrderMapper.class);
+    
+    SqlSessionFactory sqlSessionFactory =
+      new SqlSessionFactoryBuilder().build(configuration);
+
     return sqlSessionFactory;
   }
 }

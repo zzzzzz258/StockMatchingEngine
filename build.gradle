@@ -23,6 +23,9 @@ allprojects{
 clover{
     compiler {
         additionalArgs = "-g:lines,source,vars"
+
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
     }
     report {
         xml=true
