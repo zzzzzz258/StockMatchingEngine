@@ -45,19 +45,19 @@ public class Server {
    */
 
   private void acceptRequests() {
-    System.out.println("Starting to accept client requests...");
-
+    int orderID = 0;
     // loop to keep accepting request
     while (true) {
       try {
+        System.out.println("Waiting to accept client requests...");
         // accept client request
         Socket clientSocket = theServerSocket.accept();
-        String msg = (String)receiveObjectFromClient(clientSocket);
-        System.out.println("Client sent: " + msg);
-        msg = "Hi client!";
-        sendToClient(msg, clientSocket);
-        // TO-DO: create a thread to process that request
-        
+        // Create a thread to process that request
+        ClientRequest theClientRequest = new ClientRequest(clientSocket, orderID++);
+        Thread theClientThread = new Thread(theClientRequest);
+        theClientThread.start();
+        theClientThread.join();
+
       } catch (Exception e) {
         System.out.println("Error in accepting client request: " + e.getMessage());
       }
@@ -71,41 +71,6 @@ public class Server {
   private void closeServer() throws IOException {
     theServerSocket.close();
   }
-
-  /**
-   * Method to receive Object over the socket
-   * 
-   * @return Object received from client
-   * @throws IOException
-   * @throws ClassNotFoundException
-   */
-  public Object receiveObjectFromClient(Socket clientSocket) throws IOException, ClassNotFoundException {
-    InputStream o = clientSocket.getInputStream();
-    ObjectInputStream s = new ObjectInputStream(o);
-    Object obj = s.readObject();
-    return obj;
-  }
-
-  /**
-   * Method to send object to a specific socket
-   * 
-   * @param object to send and the client's socket
-   */
-  public void sendToClient(Object obj, Socket soc) {
-    try {
-      OutputStream o = soc.getOutputStream();
-      ObjectOutputStream s = new ObjectOutputStream(o);
-
-      s.writeObject(obj);
-      s.flush();
-      // s.close();
-    } catch (Exception e) {
-      System.out.println(e.getMessage());
-      System.out.println("Error during serialization");
-      e.printStackTrace();
-    }
-  }
-
 
   public static void main(String[] args) throws IOException {
     // simple application case for common package
