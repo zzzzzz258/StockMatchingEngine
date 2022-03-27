@@ -7,11 +7,20 @@ import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.StringReader;
 import java.net.Socket;
 
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
 enum RequestType_t {
-  CREATE,
-  TRANSACTION
+  CREATE, TRANSACTION
 };
 
 public class ClientRequest implements Runnable {
@@ -37,7 +46,7 @@ public class ClientRequest implements Runnable {
       msg = "Hi client!";
       sendToClient(msg);
       String xmlReq = receiveRequest();
-      if(xmlReq != null) {
+      if (xmlReq != null) {
         parseRequest(xmlReq);
       }
 
@@ -50,6 +59,7 @@ public class ClientRequest implements Runnable {
 
   /**
    * Method to receive request from client
+   * 
    * @returns request as a string
    * @throws IOException
    */
@@ -72,7 +82,7 @@ public class ClientRequest implements Runnable {
 
       while ((input = in.readLine()) != null) {
         request.append(input);
-         System.out.println(request.length());
+        System.out.println(request.length());
         if (request.length() == requestSize) {
           // received the entire request already
           break;
@@ -86,14 +96,28 @@ public class ClientRequest implements Runnable {
     return request.toString();
   }
 
-  
   /**
    * Method to parse received XML request
+   * 
    * @param XML request
    * @throws IOException
    */
-  private void parseRequest(String xmlReq)  {
-    
+  private void parseRequest(String xmlReq) {
+    try {
+      // unknown XML better turn on this
+      dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+      DocumentBuilder dBuilder = dbf.newDocumentBuilder();
+      Document doc = dBuilder.parse(new InputSource(new StringReader(xmlReq)));
+
+      // First check if it is a create or transaction request
+      String rootRequest = doc.getDocumentElement().getNodeName();
+      if(rootRequest == "create") {
+        
+      }
+      
+    } catch (Exception e) {
+      System.out.println("Error in parsing XML request: " + e.getMessage());
+    }
   }
 
   /**

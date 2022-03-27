@@ -75,7 +75,6 @@ public class Client {
 
     PrintWriter out = new PrintWriter(theClientSocket.getOutputStream(), true);
     out.println(req);
-    //sendToServer(req);
   }
 
   /**
