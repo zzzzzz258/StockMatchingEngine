@@ -73,7 +73,6 @@ public class Server {
   }
 
   public static void main(String[] args) throws IOException {
-    // simple application case for common package
     System.out.println("Starting Exchange Matching Server...");
     try {
       Server theExchangeServer = new Server(12345); // port# per the requirement

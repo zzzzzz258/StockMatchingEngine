@@ -65,7 +65,7 @@ public class Client {
    */
   private void sendRequestToServer() throws IOException{
     String req = "173\n" +
-      " <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
       "<create>\n" +
       "<account id=\"123456\" balance=\"1000\"/>\n" +
       "<symbol sym=\"SPY\">\n" +
@@ -75,7 +75,6 @@ public class Client {
 
     PrintWriter out = new PrintWriter(theClientSocket.getOutputStream(), true);
     out.println(req);
-    //sendToServer(req);
   }
 
   /**

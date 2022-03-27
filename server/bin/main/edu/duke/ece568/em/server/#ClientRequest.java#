@@ -1,24 +1,15 @@
 package edu.duke.ece568.em.server;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 
-enum RequestType_t {
-  CREATE,
-  TRANSACTION
-};
-
 public class ClientRequest implements Runnable {
   private Socket theClientSocket;
   private int orderID;
-
-  private final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 
   /**
    * constructor for client socket
@@ -36,10 +27,6 @@ public class ClientRequest implements Runnable {
       System.out.println("Client sent: " + msg);
       msg = "Hi client!";
       sendToClient(msg);
-      String xmlReq = receiveRequest();
-      if(xmlReq != null) {
-        parseRequest(xmlReq);
-      }
 
       theClientSocket.close();
     } catch (Exception e) {
@@ -49,51 +36,13 @@ public class ClientRequest implements Runnable {
   }
 
   /**
-   * Method to receive request from client
-   * @returns request as a string
+   * Method to receive xml request from client
    * @throws IOException
    */
-  private String receiveRequest() throws IOException {
-    InputStreamReader socketInput = new InputStreamReader(theClientSocket.getInputStream());
-    BufferedReader in = new BufferedReader(socketInput);
-
-    StringBuilder request = new StringBuilder("");
-    String input = in.readLine();
-    System.out.println("first line: " + input);
-    int requestSize;
-    if (input != null) {
-      try {
-        requestSize = Integer.parseInt(input, 10);
-        System.out.println(requestSize);
-      } catch (NumberFormatException e) {
-        System.out.println("Error: Received invalid request from client!");
-        return null;
-      }
-
-      while ((input = in.readLine()) != null) {
-        request.append(input);
-         System.out.println(request.length());
-        if (request.length() == requestSize) {
-          // received the entire request already
-          break;
-        }
-      }
-      System.out.println("Received req:");
-      System.out.println(request);
+  public void receiveRequestFromClient() throws IOException {
+    while(true) {
+      St
     }
-
-    socketInput.close();
-    return request.toString();
-  }
-
-  
-  /**
-   * Method to parse received XML request
-   * @param XML request
-   * @throws IOException
-   */
-  private void parseRequest(String xmlReq)  {
-    
   }
 
   /**
@@ -119,6 +68,7 @@ public class ClientRequest implements Runnable {
     try {
       OutputStream o = theClientSocket.getOutputStream();
       ObjectOutputStream s = new ObjectOutputStream(o);
+
       s.writeObject(obj);
       s.flush();
     } catch (Exception e) {
