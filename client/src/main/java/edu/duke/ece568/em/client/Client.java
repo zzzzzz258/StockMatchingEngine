@@ -1,7 +1,9 @@
 package edu.duke.ece568.em.client;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
@@ -28,11 +30,14 @@ public class Client {
     int portNum = 12345;
     try {
       Client theClient = new Client(hostname, portNum);
-      String msg = "Client is ready!";
-      theClient.sendToServer(msg);
-      msg = (String)theClient.receiveFromServer();
-      System.out.println("Server sent: " + msg);
+      /*
+       * String msg = "Client is ready!"; theClient.sendToServer(msg); msg =
+       * (String)theClient.receiveFromServer(); System.out.println("Server sent: " +
+       * msg);
+       */
       theClient.sendRequestToServer();
+      String msg = (String) theClient.receiveResponseFromServer();
+      System.out.println("Server sent: " + msg);
 
     } catch (Exception e) {
       System.out.println("Error in connecting to server: " + e.getMessage());
@@ -49,7 +54,6 @@ public class Client {
       InputStream o = theClientSocket.getInputStream();
       ObjectInputStream s = new ObjectInputStream(o);
       Object obj = s.readObject();
-      // s.close();
       return obj;
 
     } catch (Exception e) {
@@ -63,19 +67,28 @@ public class Client {
   /**
    * Method to send a request
    */
-  private void sendRequestToServer() throws IOException{
-    String req = "173\n" +
-      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-      "<create>\n" +
-      "<account id=\"123456\" balance=\"1000\"/>\n" +
-      "<symbol sym=\"SPY\">\n" +
-      "<account id=\"123456\">100000</account>\n" +
-      "</symbol>\n" +
-      "</create>";
+  private void sendRequestToServer() throws IOException {
+    String req = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<create>\n"
+        + "<account id=\"123456\" balance=\"1000\"/>\n" + "<symbol sym=\"SPY\">\n"
+        + "<account id=\"123456\">100000</account>\n" + "</symbol>\n" + "</create>";
 
+    req = req.length() + "\n" + req;
     PrintWriter out = new PrintWriter(theClientSocket.getOutputStream(), true);
     out.println(req);
-    //sendToServer(req);
+  }
+
+  /**
+   * Method to receive xml response from server
+   */
+  private String receiveResponseFromServer() throws IOException {
+    InputStreamReader socketInput = new InputStreamReader(theClientSocket.getInputStream());
+    BufferedReader in = new BufferedReader(socketInput);
+    StringBuilder response = new StringBuilder("");
+    String input;
+    while ((input = in.readLine()) != null) {
+      response.append(input);
+    }
+    return response.toString();
   }
 
   /**

@@ -14,9 +14,15 @@ import java.util.HashMap;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 import org.apache.ibatis.session.SqlSession;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -29,34 +35,58 @@ enum RequestType_t {
 public class ClientRequest implements Runnable {
   private Socket theClientSocket;
   private int orderID;
-  private AccountMapper accountMapper;
-  private PositionMapper positionMapper;
-  private OrderMapper orderMapper;
-
-  private final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+  private SqlSession dbSession;
+  private DocumentBuilder docBuilder;
+  private Document responseToClient;
 
   /**
    * constructor for client socket
+   * 
+   * @throws ParserConfigurationException
    */
-  public ClientRequest(Socket theClientSocket, int orderID) {
+  public ClientRequest(Socket theClientSocket, int orderID) throws ParserConfigurationException {
     this.theClientSocket = theClientSocket;
     this.orderID = orderID;
-    accountMapper = null;
-    positionMapper = null;
-    orderMapper = null;
+    dbSession = null; // only created when there is valid xml request
+    startDocBuilder();
+    createNewResponse();
+  }
+
+  /**
+   * Method to initialize XML doc builder which will be used for both reading and
+   * writing
+   * 
+   * @throws ParserConfigurationException
+   */
+  private void startDocBuilder() throws ParserConfigurationException {
+    DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+    // unknown XML better turn on this
+    docFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+    docBuilder = docFactory.newDocumentBuilder();
+  }
+
+  /**
+   * Start a new response for clinet in XML format
+   */
+  private void createNewResponse() {
+    responseToClient = docBuilder.newDocument();
+    Element rootElement = responseToClient.createElement("results");
+    responseToClient.appendChild(rootElement);
   }
 
   @Override
   public void run() {
     try {
       System.out.println("New client order ID: " + orderID);
-      String msg = (String) receiveObjectFromClient();
-      System.out.println("Client sent: " + msg);
-      msg = "Hi client!";
-      sendToClient(msg);
+      /*
+       * String msg = (String) receiveObjectFromClient();
+       * System.out.println("Client sent: " + msg); msg = "Hi client!";
+       * sendToClient(msg);
+       */
       String xmlReq = receiveRequest();
       if (xmlReq != null) {
         parseAndProcessRequest(xmlReq);
+        sendResponseToClient();
       }
 
       theClientSocket.close();
@@ -78,21 +108,22 @@ public class ClientRequest implements Runnable {
 
     StringBuilder request = new StringBuilder("");
     String input = in.readLine(); // reading the first line with req size out of the request to process
-    System.out.println("first line: " + input);
     int requestSize;
     if (input != null) {
       try {
         requestSize = Integer.parseInt(input, 10);
-        System.out.println(requestSize);
+        //System.out.println("expecting: " + requestSize);
       } catch (NumberFormatException e) {
         System.out.println("Error: Received invalid request from client!");
         return null;
       }
 
       while ((input = in.readLine()) != null) {
+        requestSize--;
         request.append(input);
-        System.out.println(request.length());
-        if (request.length() == requestSize) {
+
+        //System.out.println("receieved: " + input + "\nsize so far: " + request.length());
+        if (request.length() >= requestSize) {
           // received the entire request already
           break;
         }
@@ -101,7 +132,6 @@ public class ClientRequest implements Runnable {
       System.out.println(request);
     }
 
-    socketInput.close();
     return request.toString();
   }
 
@@ -113,10 +143,7 @@ public class ClientRequest implements Runnable {
    */
   private void parseAndProcessRequest(String xmlReq) {
     try {
-      // unknown XML better turn on this
-      dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-      DocumentBuilder dBuilder = dbf.newDocumentBuilder();
-      Document doc = dBuilder.parse(new InputSource(new StringReader(xmlReq)));
+      Document doc = docBuilder.parse(new InputSource(new StringReader(xmlReq)));
 
       // First check if it is a create or transaction request
       String rootRequest = doc.getDocumentElement().getNodeName();
@@ -126,6 +153,7 @@ public class ClientRequest implements Runnable {
 
     } catch (Exception e) {
       System.out.println("Error in parsing XML request: " + e.getMessage());
+      e.printStackTrace();
     }
   }
 
@@ -136,15 +164,17 @@ public class ClientRequest implements Runnable {
    */
   private void processCreateRequest(Document doc) {
     try (SqlSession session = SingletonSQLFactory.getInstance().openSession()) {
-      accountMapper = session.getMapper(AccountMapper.class);
-      positionMapper = session.getMapper(PositionMapper.class);
-      orderMapper = session.getMapper(OrderMapper.class);
-
+      dbSession = session;
+      /*
+       * accountMapper = session.getMapper(AccountMapper.class); positionMapper =
+       * session.getMapper(PositionMapper.class); orderMapper =
+       * session.getMapper(OrderMapper.class);
+       */
       if (doc.hasChildNodes()) {
         processCreateRequest_helper(doc.getChildNodes());
       }
 
-      session.commit();
+      // session.commit();
     } // end of try
   }
 
@@ -177,6 +207,7 @@ public class ClientRequest implements Runnable {
         if (tempNodeName.equals("account")) {
           createNewAccount(attributes);
         } else if (tempNodeName.equals("symbol")) {
+          
         } else { // invalid
         }
 
@@ -185,7 +216,7 @@ public class ClientRequest implements Runnable {
           processCreateRequest_helper(tempNode.getChildNodes());
         }
 
-        System.out.println("Node Name =" + tempNode.getNodeName() + " [CLOSE]");
+        // System.out.println("Node Name =" + tempNode.getNodeName() + " [CLOSE]");
 
       }
 
@@ -235,10 +266,40 @@ public class ClientRequest implements Runnable {
     if (id == null || balance == null) {
       // throw exception
     } else {
-      Account newAccount = new Account(id, Integer.parseInt(balance, 10));
-      accountMapper.insert(newAccount);
+      try {
+        Account newAccount = new Account(id, Integer.parseInt(balance, 10));
+        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+        accountMapper.insert(newAccount);
+
+        dbSession.commit();
+        Element successElement = responseToClient.createElement("created");
+        successElement.setAttribute("id", id);
+        responseToClient.getFirstChild().appendChild(successElement);
+      } catch (Exception e) {
+
+        Element errorElement = responseToClient.createElement("error");
+        errorElement.setAttribute("id", id);
+        errorElement.setTextContent(e.getMessage());
+        responseToClient.getFirstChild().appendChild(errorElement);
+      }
     }
 
+  }
+
+  /**
+   * Method to send XML response to client
+   */
+  private void sendResponseToClient() {
+    try {
+      TransformerFactory transformerFactory = TransformerFactory.newInstance();
+      Transformer transformer = transformerFactory.newTransformer();
+      DOMSource source = new DOMSource(responseToClient);
+      OutputStream output = theClientSocket.getOutputStream();
+      StreamResult result = new StreamResult(output);
+      transformer.transform(source, result);
+    } catch (Exception e) {
+      System.out.println("Error in sending response to client: " + e.getMessage());
+    }
   }
 
 }
