@@ -112,7 +112,7 @@ public class ClientRequest implements Runnable {
     if (input != null) {
       try {
         requestSize = Integer.parseInt(input, 10);
-        //System.out.println("expecting: " + requestSize);
+        // System.out.println("expecting: " + requestSize);
       } catch (NumberFormatException e) {
         System.out.println("Error: Received invalid request from client!");
         return null;
@@ -122,7 +122,8 @@ public class ClientRequest implements Runnable {
         requestSize--;
         request.append(input);
 
-        //System.out.println("receieved: " + input + "\nsize so far: " + request.length());
+        // System.out.println("receieved: " + input + "\nsize so far: " +
+        // request.length());
         if (request.length() >= requestSize) {
           // received the entire request already
           break;
@@ -194,20 +195,15 @@ public class ClientRequest implements Runnable {
         // get node name and value
         String tempNodeName = tempNode.getNodeName();
 
-        HashMap<String, String> attributes = new HashMap<>();
-        if (tempNode.hasAttributes()) {
-          // get attributes names and values
-          NamedNodeMap nodeMap = tempNode.getAttributes();
-          for (int i = 0; i < nodeMap.getLength(); i++) {
-            Node node = nodeMap.item(i);
-            attributes.put(node.getNodeName(), node.getNodeValue());
-          }
-        }
-
         if (tempNodeName.equals("account")) {
-          createNewAccount(attributes);
+          Node nodeParent = tempNode.getParentNode();
+          if (nodeParent != null && nodeParent.getNodeName().equals("symbol")) {
+            addSymbol(nodeParent.getAttributes(), tempNode);
+          } else {
+            createNewAccount(tempNode);
+          }
         } else if (tempNodeName.equals("symbol")) {
-          
+          // continue to see child nodes
         } else { // invalid
         }
 
@@ -215,12 +211,9 @@ public class ClientRequest implements Runnable {
           // loop again if has child nodes
           processCreateRequest_helper(tempNode.getChildNodes());
         }
-
         // System.out.println("Node Name =" + tempNode.getNodeName() + " [CLOSE]");
-
-      }
-
-    }
+      } // end of element node condition
+    } // end of for-loop
   }
 
   /**
@@ -258,31 +251,126 @@ public class ClientRequest implements Runnable {
   /**
    * Method to create a new account in the database
    * 
-   * @param HashMap of attribute of name and values
+   * @param Node from XML request holding the specific create req
    */
-  private void createNewAccount(HashMap<String, String> attributes) {
+  private void createNewAccount(Node tempNode) {
+    HashMap<String, String> attributes = new HashMap<>();
+    if (tempNode.hasAttributes()) {
+      // get attributes names and values
+      NamedNodeMap nodeMap = tempNode.getAttributes();
+      for (int i = 0; i < nodeMap.getLength(); i++) {
+        Node node = nodeMap.item(i);
+        attributes.put(node.getNodeName(), node.getNodeValue());
+      }
+    }
+
     String id = attributes.get("id");
     String balance = attributes.get("balance");
     if (id == null || balance == null) {
-      // throw exception
+      // throw exception????
+      // How to handle invalid request
+      Element errorElement = responseToClient.createElement("error");
+      addErrorToResponse(errorElement, id, null, "Invalid request");
+
     } else {
       try {
         Account newAccount = new Account(id, Integer.parseInt(balance, 10));
         AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
         accountMapper.insert(newAccount);
-
         dbSession.commit();
-        Element successElement = responseToClient.createElement("created");
-        successElement.setAttribute("id", id);
-        responseToClient.getFirstChild().appendChild(successElement);
-      } catch (Exception e) {
 
+        Element successElement = responseToClient.createElement("created");
+        addSuccessToResponse(successElement, id, null);
+      } catch (Exception e) {
         Element errorElement = responseToClient.createElement("error");
-        errorElement.setAttribute("id", id);
-        errorElement.setTextContent(e.getMessage());
-        responseToClient.getFirstChild().appendChild(errorElement);
+        addErrorToResponse(errorElement, id, null, e.getMessage());
       }
     }
+
+  }
+
+  /**
+   * Method to create a new symbol in the database if required and create shares
+   * 
+   * @param
+   */
+  private void addSymbol(NamedNodeMap symAttribute, Node tempNode) {
+    // get the symbol
+    Node symNode = symAttribute.getNamedItem("sym");
+    String symVal = symNode.getNodeValue();
+
+    // get the attributes for account
+    NamedNodeMap attributes = tempNode.getAttributes();
+    Node idNode = attributes.getNamedItem("id");
+    String id = idNode.getNodeValue();
+    String share = tempNode.getTextContent();
+    
+    if (id == null || share == null) {
+      // throw exception????
+      // How to handle invalid request
+      Element errorElement = responseToClient.createElement("error");
+      addErrorToResponse(errorElement, id, null, "Invalid request");
+
+    } else {
+      try {
+        Position newPosition = new Position(symVal, Double.parseDouble(share), id);
+        System.out.println("Sym: " + newPosition.getSymbol() + " Account: " + newPosition.getAccountId());
+        PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+
+        // first check if the symbol already exists
+        Position existingSym = positionMapper.select(newPosition);
+        if (existingSym == null) { // new symbol
+          positionMapper.insert(newPosition);
+        } else { // just update the balance
+          newPosition.setAmount(newPosition.getAmount() + existingSym.getAmount());
+          positionMapper.update(newPosition);
+        }
+
+        dbSession.commit();
+
+        Element successElement = responseToClient.createElement("created");
+        addSuccessToResponse(successElement, id, null);
+      } catch (Exception e) {
+        Element errorElement = responseToClient.createElement("error");
+        addErrorToResponse(errorElement, id, null, e.getMessage());
+      }
+    }
+
+  }
+
+  /**
+   * Method to add a child for success to XML response to client
+   * 
+   * @param Element to add, account id and symbol (null if it is for account
+   *                creation)
+   */
+  private void addSuccessToResponse(Element successElement, String id, String sym) {
+    addToResponse(successElement, id, sym);
+  }
+
+  /**
+   * Method to add a child for error to XML response to client
+   * 
+   * @param Element to add, account id and symbol (null if it is for account
+   *                creation), error message
+   */
+  private void addErrorToResponse(Element errorElement, String id, String sym, String errMsg) {
+    errorElement.setTextContent(errMsg);
+    addToResponse(errorElement, id, sym);
+  }
+
+  /**
+   * Method to add a child to XML response to client
+   * 
+   * @param Element to add, account id and symbol (null if it is for account
+   *                creation)
+   */
+  private void addToResponse(Element newElement, String id, String sym) {
+    if (sym != null) {
+      newElement.setAttribute("sym", sym);
+    }
+    newElement.setAttribute("id", id);
+    responseToClient.getFirstChild().appendChild(newElement);
 
   }
 
