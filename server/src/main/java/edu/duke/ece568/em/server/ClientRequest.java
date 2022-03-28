@@ -9,15 +9,18 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.StringReader;
 import java.net.Socket;
-
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
+import java.util.HashMap;
 
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.apache.ibatis.session.SqlSession;
+import org.w3c.dom.Document;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 
 enum RequestType_t {
   CREATE, TRANSACTION
@@ -26,6 +29,9 @@ enum RequestType_t {
 public class ClientRequest implements Runnable {
   private Socket theClientSocket;
   private int orderID;
+  private AccountMapper accountMapper;
+  private PositionMapper positionMapper;
+  private OrderMapper orderMapper;
 
   private final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 
@@ -35,6 +41,9 @@ public class ClientRequest implements Runnable {
   public ClientRequest(Socket theClientSocket, int orderID) {
     this.theClientSocket = theClientSocket;
     this.orderID = orderID;
+    accountMapper = null;
+    positionMapper = null;
+    orderMapper = null;
   }
 
   @Override
@@ -47,7 +56,7 @@ public class ClientRequest implements Runnable {
       sendToClient(msg);
       String xmlReq = receiveRequest();
       if (xmlReq != null) {
-        parseRequest(xmlReq);
+        parseAndProcessRequest(xmlReq);
       }
 
       theClientSocket.close();
@@ -68,7 +77,7 @@ public class ClientRequest implements Runnable {
     BufferedReader in = new BufferedReader(socketInput);
 
     StringBuilder request = new StringBuilder("");
-    String input = in.readLine();
+    String input = in.readLine(); // reading the first line with req size out of the request to process
     System.out.println("first line: " + input);
     int requestSize;
     if (input != null) {
@@ -102,7 +111,7 @@ public class ClientRequest implements Runnable {
    * @param XML request
    * @throws IOException
    */
-  private void parseRequest(String xmlReq) {
+  private void parseAndProcessRequest(String xmlReq) {
     try {
       // unknown XML better turn on this
       dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
@@ -111,12 +120,75 @@ public class ClientRequest implements Runnable {
 
       // First check if it is a create or transaction request
       String rootRequest = doc.getDocumentElement().getNodeName();
-      if(rootRequest == "create") {
-        
+      if (rootRequest == "create") {
+        processCreateRequest(doc);
       }
-      
+
     } catch (Exception e) {
       System.out.println("Error in parsing XML request: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Method to process a create request
+   * 
+   * @param Document doc
+   */
+  private void processCreateRequest(Document doc) {
+    try (SqlSession session = SingletonSQLFactory.getInstance().openSession()) {
+      accountMapper = session.getMapper(AccountMapper.class);
+      positionMapper = session.getMapper(PositionMapper.class);
+      orderMapper = session.getMapper(OrderMapper.class);
+
+      if (doc.hasChildNodes()) {
+        processCreateRequest_helper(doc.getChildNodes());
+      }
+
+      session.commit();
+    } // end of try
+  }
+
+  /**
+   * Helper method to process create request by recursively working on nodelist
+   * 
+   * @param NodeList nodeList
+   */
+  private void processCreateRequest_helper(NodeList nodeList) {
+    for (int count = 0; count < nodeList.getLength(); count++) {
+
+      Node tempNode = nodeList.item(count);
+
+      // make sure it's element node.
+      if (tempNode.getNodeType() == Node.ELEMENT_NODE) {
+
+        // get node name and value
+        String tempNodeName = tempNode.getNodeName();
+
+        HashMap<String, String> attributes = new HashMap<>();
+        if (tempNode.hasAttributes()) {
+          // get attributes names and values
+          NamedNodeMap nodeMap = tempNode.getAttributes();
+          for (int i = 0; i < nodeMap.getLength(); i++) {
+            Node node = nodeMap.item(i);
+            attributes.put(node.getNodeName(), node.getNodeValue());
+          }
+        }
+
+        if (tempNodeName.equals("account")) {
+          createNewAccount(attributes);
+        } else if (tempNodeName.equals("symbol")) {
+        } else { // invalid
+        }
+
+        if (tempNode.hasChildNodes()) {
+          // loop again if has child nodes
+          processCreateRequest_helper(tempNode.getChildNodes());
+        }
+
+        System.out.println("Node Name =" + tempNode.getNodeName() + " [CLOSE]");
+
+      }
+
     }
   }
 
@@ -150,6 +222,23 @@ public class ClientRequest implements Runnable {
       System.out.println("Error during serialization");
       e.printStackTrace();
     }
+  }
+
+  /**
+   * Method to create a new account in the database
+   * 
+   * @param HashMap of attribute of name and values
+   */
+  private void createNewAccount(HashMap<String, String> attributes) {
+    String id = attributes.get("id");
+    String balance = attributes.get("balance");
+    if (id == null || balance == null) {
+      // throw exception
+    } else {
+      Account newAccount = new Account(id, Integer.parseInt(balance, 10));
+      accountMapper.insert(newAccount);
+    }
+
   }
 
 }

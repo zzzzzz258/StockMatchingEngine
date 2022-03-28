@@ -83,41 +83,5 @@ public class Server {
       // print exception message about Throwable object
       e.printStackTrace();
     }
-
-    // simple test case for mybatis ORM
-    SqlSessionFactory sqlSessionFactory = getSqlSessionFactory();
-    try (SqlSession session = sqlSessionFactory.openSession()) {
-      AccountMapper accountMapper = session.getMapper(AccountMapper.class);
-      PositionMapper positionMapper = session.getMapper(PositionMapper.class);
-      OrderMapper orderMapper = session.getMapper(OrderMapper.class);
-
-      // TODO: write operations to SB here
-
-      session.commit();
-    }
-
-  }
-
-  /**
-   * Connect to the postgresql database.
-   * 
-   * @return {@link SqlSessionFactory}
-   */
-  public static SqlSessionFactory getSqlSessionFactory() {
-    DataSource dataSource = MyDataSourceFactory.getDataSource("org.postgresql.Driver", "jdbc:postgresql:stock_market", "postgres", "ece568hw4"); 
-    
-    TransactionFactory transactionFactory =
-      new JdbcTransactionFactory();
-    Environment environment =
-      new Environment("development", transactionFactory, dataSource);
-    Configuration configuration = new Configuration(environment);
-    configuration.addMapper(AccountMapper.class);
-    configuration.addMapper(PositionMapper.class);
-    configuration.addMapper(OrderMapper.class);
-    
-    SqlSessionFactory sqlSessionFactory =
-      new SqlSessionFactoryBuilder().build(configuration);
-
-    return sqlSessionFactory;
   }
 }
