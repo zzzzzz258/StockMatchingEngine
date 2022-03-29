@@ -314,7 +314,7 @@ public class ClientRequest implements Runnable {
     } else {
       try {
         Position newPosition = new Position(symVal, Double.parseDouble(share), id);
-        System.out.println("Sym: " + newPosition.getSymbol() + " Account: " + newPosition.getAccountId());
+        //System.out.println("Sym: " + newPosition.getSymbol() + " Account: " + newPosition.getAccountId());
         PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
 
         // first check if the symbol already exists
@@ -329,7 +329,7 @@ public class ClientRequest implements Runnable {
         dbSession.commit();
 
         Element successElement = responseToClient.createElement("created");
-        addSuccessToResponse(successElement, id, null);
+        addSuccessToResponse(successElement, id, symVal);
       } catch (Exception e) {
         Element errorElement = responseToClient.createElement("error");
         addErrorToResponse(errorElement, id, null, e.getMessage());
