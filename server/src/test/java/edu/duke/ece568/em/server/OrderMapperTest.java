@@ -35,7 +35,7 @@ public class OrderMapperTest {
 
   @Test
   public void test_All() {
-    SqlSessionFactory ssf = Server.getSqlSessionFactory();
+    SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 
     try (SqlSession session = ssf.openSession()) {
       AccountMapper accountMapper = session.getMapper(AccountMapper.class);

@@ -8,8 +8,8 @@ public class ServerTest {
   @Test
   public void test_() {
     try {
-      Server s = new Server(12345);
-      assertEquals(12345, s.getListenerPort());
+      Server s = new Server(12000);  // save port num 12345 for ClientRequestTest
+      assertEquals(12000, s.getListenerPort());
     } catch (Exception e) {
       // print exception message about Throwable object
       e.printStackTrace();

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 public class AccountMapperTest {
   @Test
   public void test_Everything() {
-    SqlSessionFactory ssf = Server.getSqlSessionFactory();
+    SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 
     try (SqlSession session = ssf.openSession()) {
       AccountMapper accountMapper = session.getMapper(AccountMapper.class);

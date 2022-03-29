@@ -151,7 +151,9 @@ public class ClientRequest implements Runnable {
       if (rootRequest == "create") {
         processCreateRequest(doc);
       }
-
+      else if (rootRequest == "transaction") {
+        
+      }
     } catch (Exception e) {
       System.out.println("Error in parsing XML request: " + e.getMessage());
       e.printStackTrace();
@@ -179,6 +181,21 @@ public class ClientRequest implements Runnable {
     } // end of try
   }
 
+  /**
+   * Method to process a transaction request
+   * 
+   * @param Document doc
+   */
+  private void processTransactionRequest(Document doc) {
+    try (SqlSession session = SingletonSQLFactory.getInstance().openSession()) {
+      dbSession = session;
+      if (doc.hasChildNodes()) {
+        //processTransactionRequest_helper(doc.getChildNodes());
+        System.out.println("Ready to process Transaction Request");
+      }
+    } // end of try
+  }
+  
   /**
    * Helper method to process create request by recursively working on nodelist
    * 

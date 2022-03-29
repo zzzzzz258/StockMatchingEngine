@@ -3,8 +3,6 @@ package edu.duke.ece568.em.server;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import java.util.List;
-
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
@@ -12,7 +10,7 @@ import org.junit.jupiter.api.Test;
 public class PositionMapperTest {
   @Test
   public void test_Everything() {
-    SqlSessionFactory ssf = Server.getSqlSessionFactory();
+    SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 
     try (SqlSession session = ssf.openSession()) {
       AccountMapper accountMapper = session.getMapper(AccountMapper.class);
