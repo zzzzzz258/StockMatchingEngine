@@ -11,7 +11,7 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 
 public class OrderMapperTest {
-  public void addRows(OrderMapper om) {
+  public static void addRows(OrderMapper om) {
     Order o1 = new Order("TLSA", -100, 100, "1");
     Order o2 = new Order("TLSA", -105, 105, "1");
     Order o3 = new Order("TLSA", -110, 105, "1");
@@ -31,6 +31,8 @@ public class OrderMapperTest {
 
     om.insert(o11);
     om.insert(o12);    
+
+    System.out.println(o11);
   }
 
   @Test

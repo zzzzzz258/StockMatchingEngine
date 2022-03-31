@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Result;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 
 public interface AccountMapper {
@@ -15,7 +16,8 @@ public interface AccountMapper {
   final String selectOneByID = "select * from account where account_id = #{accountId}";
   final String insert = "insert into account (account_id, balance) values (#{accountId}, #{balance});";
   final String deleteAll = "delete from account";
-
+  final String updateBalance = "update account set balance = #{balance} where account_id = #{accountId}";
+  
   /**
    * select all data, mainly for testing
    */
@@ -43,4 +45,7 @@ public interface AccountMapper {
    */
   @Delete(deleteAll)
   void deleteAll();
+
+  @Update(updateBalance)
+  void updateBalance(Account account);
 }

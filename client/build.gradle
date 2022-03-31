@@ -35,3 +35,7 @@ clover{
         additionalArgs = "-g:lines,source,vars"
     }
 }
+
+sourceSets {
+  main.output.resourcesDir = main.java.outputDir
+}

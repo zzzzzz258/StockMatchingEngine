@@ -23,3 +23,13 @@ time bigint,
 constraint fk_account_id
 foreign key(account_id) references account(account_id) on delete cascade on update cascade
 );
+
+create table transaction (
+transaction_id serial primary key,
+order_id integer,
+amount double precision,
+price double precision,
+time bigint,
+constraint fk_order_id
+foreign key(order_id) references stock_order(order_id) on delete cascade on update cascade
+);
