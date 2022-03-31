@@ -267,6 +267,7 @@ public class ClientRequest implements Runnable {
           }
         } else if (tempNodeName.equals("cancel")) {
           // TODO
+          cancelOrder(tempNode, accountId);
         } else if (tempNodeName.equals("query")) {
           // TODO
         } else { // invalid
@@ -426,7 +427,7 @@ public class ClientRequest implements Runnable {
   /**
    * Method to add a new order in database
    * 
-   * @param node      is the order tag
+   * @param node is the order tag
    * @param accountId
    * @return new order if added successfully, null if fails
    */
@@ -626,6 +627,88 @@ public class ClientRequest implements Runnable {
     return new Transaction(order.getOrderId(), -amount, price);
   }
 
+  /**
+   * Method to cancel an order.
+   */
+  private void cancelOrder(Node node, String accountId) {
+    NamedNodeMap attributes = node.getAttributes();
+
+    try {
+      Node idNode = attributes.getNamedItem("id");
+      String orderId = idNode.getNodeValue();
+
+      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+      AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+      PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+
+      Account account = accountMapper.selectOneById(accountId);
+      Order order = orderMapper.selectById(Integer.parseInt(orderId));
+      Position position = positionMapper.select(new Position(order.getSymbol(), accountId));
+
+      if (!order.getAccountId().equals(accountId)) {  // order and account not match
+        addErrorToResponse(responseToClient.createElement("error"), orderId, null, "cancel fails, order does not belong to this account");
+        return;
+      } // end if
+      
+      Element canceled = responseToClient.createElement("canceled");
+      canceled.setAttribute("id", orderId);
+      
+      if (order.getStatus() == Status.OPEN) { // cancel it, return shares or funds
+        if (order.getAmount() > 0) { // buy order, refund
+          double refund = order.getAmount() * order.getLimitPrice();
+          account.setBalance(account.getBalance() + refund);
+          accountMapper.updateBalance(account);
+        }
+        else { // sell order, return
+          double returnShares = order.getAmount();
+          position.setAmount(position.getAmount() + returnShares);
+          positionMapper.update(position);
+        }
+        // cancel order, add to response
+        order.setStatus(Status.CANCELED);
+        order.setTime(System.currentTimeMillis());
+        orderMapper.cancelById(order);
+        addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());        
+      }// endif
+      
+      // add executed rows
+      List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
+      System.out.println(transactions.size());
+      addExecutedElements(canceled, transactions);
+      addToResponse(canceled);
+
+      dbSession.commit();
+    }
+    catch (NullPointerException e) {
+      addErrorToResponse(responseToClient.createElement("error"), accountId, null, "order not found");
+    }
+  }
+
+  /**
+   * Method to add tag canceled to element*
+   */
+  private void addCanceledElement(Node parentNode, double shares, long time) {
+    Element canceled = responseToClient.createElement("canceled");
+    canceled.setAttribute("shares", Double.toString(shares));
+    canceled.setAttribute("time", Long.toString(time/1000));
+    parentNode.appendChild(canceled);
+  }
+
+  /**
+   * Add transactions(executed records) to response
+   */
+  private void addExecutedElements(Node parentNode, List<Transaction> transactions) {
+    for (Transaction t: transactions) {
+      Element executed = responseToClient.createElement("executed");
+      executed.setAttribute("shares", Double.toString(Math.abs(t.getAmount())));
+      executed.setAttribute("price", Double.toString(t.getPrice()));
+      executed.setAttribute("time", Double.toString(t.getTime()/1000));
+      parentNode.appendChild(executed);
+    }
+  }
+
+  
   /**
    * Method to add a child for success to XML response to client
    * 

@@ -7,6 +7,10 @@ public class Transaction {
   private double price;
   private long time;
 
+  public Transaction(int orderId) {
+    this.orderId = orderId;
+  }
+  
   public Transaction(int transactionId, int orderId, double amount, double price, long time) {
     this.transactionId = transactionId;
     this.orderId = orderId;

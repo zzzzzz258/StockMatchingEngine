@@ -74,7 +74,7 @@ public class OrderMapperTest {
       om.cancelById(or1);
       om.executeById(or2);
       or3.setAmount(9999);
-      om.updateAmountById(or3);
+      om.updateAmountStatusById(or3);
 
       oss = om.selectAll();
       Map<Integer, Order> osmap = new HashMap<Integer, Order>();
