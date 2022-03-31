@@ -1,0 +1,3 @@
+I suppose all order tag has 3 attributes: sym, amount, limit. Not consider missing one of them.
+Based on the XMl parsing Library, we cannot ensure the attributes in order's results maintain the same order. Instead, I define the order to be id, sym, amount, limit.
+A parameter danger, there are 2 orderID(orderId) in ClientRequest.java
