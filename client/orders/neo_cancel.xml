@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<transactions id="123456">
+  <cancel id="1086"/>
+  <cancel id = "1085"/>
+  <cancel id="1087"/>
+</transactions>

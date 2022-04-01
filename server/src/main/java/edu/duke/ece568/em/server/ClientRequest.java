@@ -192,7 +192,8 @@ public class ClientRequest implements Runnable {
    */
   private SqlSession getReadCommittedSession() {
     return SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.REPEATABLE_READ);
-    //return SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.READ_COMMITTED);
+    // return
+    // SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.READ_COMMITTED);
   }
 
   /**
@@ -276,8 +277,7 @@ public class ClientRequest implements Runnable {
             tryMatchOrder(newOrder);
           }
         } else if (tempNodeName.equals("cancel")) {
-          // TODO
-          // cancelOrder(tempNode, accountId);
+          cancelOrder(tempNode, accountId);
         } else if (tempNodeName.equals("query")) {
           // TODO
         } else { // invalid
@@ -723,7 +723,7 @@ public class ClientRequest implements Runnable {
         dbSession.commit();
         return;
       } catch (Exception e) {
-        System.out.println("retry addBalance");        
+        System.out.println("retry addBalance");
         dbSession.close();
       }
     }
@@ -734,12 +734,11 @@ public class ClientRequest implements Runnable {
    */
   private void insertTransaction(Transaction transaction) {
     try {
-    dbSession = this.getReadCommittedSession();
-    TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
-    transactionMapper.insert(transaction);
-    dbSession.commit();
-    }
-    catch (Exception e) {
+      dbSession = this.getReadCommittedSession();
+      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+      transactionMapper.insert(transaction);
+      dbSession.commit();
+    } catch (Exception e) {
       System.out.println("Error ocurred in inserting transaction");
       System.out.println(e.getStackTrace());
     }
@@ -751,54 +750,79 @@ public class ClientRequest implements Runnable {
   private void cancelOrder(Node node, String accountId) {
     NamedNodeMap attributes = node.getAttributes();
 
-    try {
-      Node idNode = attributes.getNamedItem("id");
-      String orderId = idNode.getNodeValue();
+    Node idNode = attributes.getNamedItem("id");
+    String orderId = idNode.getNodeValue();
 
-      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-      AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
-      PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
-      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+    Element canceled = responseToClient.createElement("canceled");
+    canceled.setAttribute("id", orderId);
 
-      Account account = accountMapper.selectOneById(accountId);
-      Order order = orderMapper.selectById(Integer.parseInt(orderId));
-      Position position = positionMapper.select(new Position(order.getSymbol(), accountId));
+    tryCancel(orderId, accountId, canceled);
+    
+    // add executed rows
+    dbSession = this.getReadCommittedSession();
+    TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+    List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
+    addExecutedElements(canceled, transactions);
+    addToResponse(canceled);
 
-      if (!order.getAccountId().equals(accountId)) { // order and account not match
-        addErrorToResponse(responseToClient.createElement("error"), orderId, null,
-            "cancel fails, order does not belong to this account");
-        return;
-      } // end if
+    dbSession.close();
+  }
 
-      Element canceled = responseToClient.createElement("canceled");
-      canceled.setAttribute("id", orderId);
+  /**
+   * Method to try to cancel an order
+   *
+   * @return true if canceled or complete, false if order and account no match
+   */
+  private boolean tryCancel(String orderId, String accountId, Element canceled) {
+    while (true) {
+      try {
+        dbSession = this.getReadCommittedSession();
 
-      if (order.getStatus() == Status.OPEN) { // cancel it, return shares or funds
-        if (order.getAmount() > 0) { // buy order, refund
-          double refund = order.getAmount() * order.getLimitPrice();
-          account.setBalance(account.getBalance() + refund);
-          accountMapper.updateBalance(account);
-        } else { // sell order, return
-          double returnShares = order.getAmount();
-          position.setAmount(position.getAmount() + returnShares);
-          positionMapper.update(position);
+        OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+        Order order = orderMapper.selectByIdL(Integer.parseInt(orderId));        
+
+        if (order == null || !order.getAccountId().equals(accountId)) { // order and account not match
+          addErrorToResponse(responseToClient.createElement("error"), orderId, null,
+              "cancel fails, order does not exist or not belong to this account");
+          dbSession.close();
+          return false;
+        } // end if
+
+        if (order.getStatus() == Status.OPEN) { // cancel it, return shares or funds
+          System.out.println("Found open order to cancel");
+          
+          // cancel order, add to response
+          order.setStatus(Status.CANCELED);
+          order.setTime(System.currentTimeMillis());
+          orderMapper.cancelById(order);
+
+          dbSession.commit();
+
+          if (order.getAmount() > 0) { // buy order, refund
+            double refund = order.getAmount() * order.getLimitPrice();
+            addBalance(accountId, refund);
+          } else { // sell order, return
+            double returnShares = order.getAmount();
+            addPosition(accountId, order.getSymbol(), returnShares);
+          }
+          
+          addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());
+          return true;
+        } // endif
+        else if (order.getStatus() == Status.CANCELED) {
+          dbSession.close();
+          addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());
+          return true;
         }
-        // cancel order, add to response
-        order.setStatus(Status.CANCELED);
-        order.setTime(System.currentTimeMillis());
-        orderMapper.cancelById(order);
-        addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());
-      } // endif
-
-      // add executed rows
-      List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
-      System.out.println(transactions.size());
-      addExecutedElements(canceled, transactions);
-      addToResponse(canceled);
-
-      dbSession.commit();
-    } catch (NullPointerException e) {
-      addErrorToResponse(responseToClient.createElement("error"), accountId, null, "order not found");
+        else { // complete
+          dbSession.close();
+          return true;
+        }
+      } catch (Exception e) {
+        System.out.println("Retry cancel " + orderId);
+        System.out.println(e.getMessage());
+        dbSession.close();
+      }
     }
   }
 
@@ -820,7 +844,7 @@ public class ClientRequest implements Runnable {
       Element executed = responseToClient.createElement("executed");
       executed.setAttribute("shares", Double.toString(Math.abs(t.getAmount())));
       executed.setAttribute("price", Double.toString(t.getPrice()));
-      executed.setAttribute("time", Double.toString(t.getTime() / 1000));
+      executed.setAttribute("time", Long.toString(t.getTime() / 1000));
       parentNode.appendChild(executed);
     }
   }
