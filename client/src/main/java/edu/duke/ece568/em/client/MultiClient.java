@@ -5,7 +5,7 @@ import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
 public class MultiClient {
-  final int numOfThreads = 10;
+  final int numOfThreads = 100;
   final CyclicBarrier barrier = new CyclicBarrier(numOfThreads, new scalabilityCalculator());
 
   class scalabilityCalculator implements Runnable {
@@ -30,6 +30,10 @@ public class MultiClient {
   }
 
   class ClientWorker implements Runnable {
+    private long reqID;
+    public ClientWorker(long reqID) {
+      this.reqID = reqID;
+    }
 
     @Override
     public void run() {
@@ -37,7 +41,7 @@ public class MultiClient {
       int portNum = 12345;
       try {
         Client theClient = new Client(hostname, portNum);
-        theClient.runSampleCreateTest();
+        theClient.runSampleCreateTest(String.valueOf(reqID), "sym");
       } catch (Exception e) {
         System.out.println("Error in connecting to server: " + e.getMessage());
       }
@@ -63,7 +67,7 @@ public class MultiClient {
     MultiClient multiClient = new MultiClient();
     // spawn ClientWorker threads
     for (int i = 0; i < multiClient.numOfThreads; i++) {
-      Thread clientWorkerThread = new Thread(multiClient.new ClientWorker());
+      Thread clientWorkerThread = new Thread(multiClient.new ClientWorker(i));
       clientWorkerThread.setName("Thread " + i);
       clientWorkerThread.start();
     }

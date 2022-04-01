@@ -1,5 +1,6 @@
 package edu.duke.ece568.em.server;
 
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -9,6 +10,7 @@ import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.net.Socket;
@@ -793,17 +795,14 @@ public class ClientRequest implements Runnable {
       // Add the size of the xml at the beginning
       int lengthOfXML = xmlString.length();
       xmlString = lengthOfXML + "\n" + xmlString;
+      System.out.println("Sending response: " + xmlString);
 
       // get the output stream from the socket.
       OutputStream outputStream = theClientSocket.getOutputStream();
-      // create a data output stream from the output stream so we can send data
-      // through it
-      DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-
       // write the message we want to send
-      dataOutputStream.writeUTF(xmlString);
-      dataOutputStream.flush(); // send the message
-      dataOutputStream.close(); // close the output stream when we're done.
+      PrintWriter out = new PrintWriter(outputStream, true);
+      out.println(xmlString);
+      out.flush();
     } catch (Exception e) {
       System.out.println("Error in sending response to client: " + e.getMessage());
     }
