@@ -172,19 +172,20 @@ public class ClientRequest implements Runnable {
       processCreateRequest_helper(doc.getChildNodes());
     }
   }
-  
+
   /**
    * Method to get read_committed level session
    */
   private SqlSession getManualCommitSession() {
     return SingletonSQLFactory.getInstance().openSession(false);
   }
-  
+
   /**
    * Method to get read_committed level session
    */
   private SqlSession getReadCommittedSession() {
     return SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.REPEATABLE_READ);
+    //return SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.READ_COMMITTED);
   }
 
   /**
@@ -606,9 +607,9 @@ public class ClientRequest implements Runnable {
     while (true) {
       try {
         dbSession = this.getReadCommittedSession();
-        //dbSession = this.getManualCommitSession();
+        // dbSession = this.getManualCommitSession();
         OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+
         PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
 
         newOrder = orderMapper.selectByIdL(newOrder.getOrderId());
@@ -616,14 +617,14 @@ public class ClientRequest implements Runnable {
         Order seller = ifSell ? new Order(newOrder) : orderMapper.selectSellOrder(newOrder);
         Order buyer = ifSell ? orderMapper.selectBuyOrder(newOrder) : new Order(newOrder);
         if (seller == null || buyer == null) {
+          dbSession.close();
           return;
         }
         double matchPrice = seller.getTime() < buyer.getTime() ? seller.getLimitPrice() : buyer.getLimitPrice();
         double matchAmount = Math.min(Math.abs(seller.getAmount()), Math.abs(buyer.getAmount()));
-        Account account = accountMapper.selectOneByIdL(seller.getAccountId());
-        Transaction sellTransaction = doSellBusiness(seller, account, accountMapper, matchAmount, matchPrice);
-        Transaction buyTransaction = doBuyBusiness(buyer, account, accountMapper, positionMapper, matchAmount,
-            matchPrice);
+
+        Transaction sellTransaction = doSellBusiness(seller, matchAmount, matchPrice);
+        Transaction buyTransaction = doBuyBusiness(buyer, matchAmount, matchPrice);
 
         if (seller.getAmount() == 0)
           seller.setStatus(Status.COMPLETE);
@@ -632,19 +633,27 @@ public class ClientRequest implements Runnable {
 
         orderMapper.updateAmountStatusById(seller);
         orderMapper.updateAmountStatusById(buyer);
-        
+
         dbSession.commit();
+
+        // add balance to account, add shraes to position
+        addBalance(newOrder.getAccountId(), matchAmount * matchPrice);
+        addPosition(newOrder.getAccountId(), newOrder.getSymbol(), matchAmount);
+        if (buyer.getLimitPrice() > matchPrice) { // refund
+          addBalance(newOrder.getAccountId(), matchAmount * (buyer.getLimitPrice() - matchPrice));
+        }
 
         // insert transaction
         insertTransaction(sellTransaction);
         insertTransaction(buyTransaction);
-        
+
         // change new order status
         newOrder = ifSell ? seller : buyer;
         if (newOrder.getStatus() == Status.COMPLETE) {
           return;
         }
       } catch (Exception e) {
+        System.out.println("Retry match order");
         dbSession.close();
       }
     }
@@ -653,48 +662,79 @@ public class ClientRequest implements Runnable {
   /**
    * Method to do logics in buy operation
    */
-  private Transaction doBuyBusiness(Order order, Account account, AccountMapper accountMapper,
-      PositionMapper positionMapper, double amount, double price) {
-    // update amount in order, and account's position
-    Position position = positionMapper.select(new Position(order.getSymbol(), account.getAccountId()));
-    double primitivePrice = order.getLimitPrice();
+  private Transaction doBuyBusiness(Order order, double amount, double price) {
     order.setAmount(order.getAmount() - amount);
-    if (position == null) {
-      position = new Position(order.getSymbol(), amount, account.getAccountId());
-      positionMapper.insert(position);
-    } else {
-      position.setAmount(position.getAmount() + amount);
-      positionMapper.update(position);
-    }
-    // refund if necessary
-    if (primitivePrice > price) {
-      double refund = (primitivePrice - price) * amount;
-      account.setBalance(account.getBalance() + refund);
-      accountMapper.updateBalance(account);
-    } // endif
     return new Transaction(order.getOrderId(), amount, price);
   }
 
   /**
    * Method to de logics in sell operation
    */
-  private Transaction doSellBusiness(Order order, Account account, AccountMapper accountMapper, double amount,
-      double price) {
+  private Transaction doSellBusiness(Order order, double amount, double price) {
     // update amount in order, and account's balance
     order.setAmount(order.getAmount() + amount);
-    account.setBalance(account.getBalance() + (price * amount));
-    accountMapper.updateBalance(account);
     return new Transaction(order.getOrderId(), -amount, price);
+  }
+
+  /**
+   * Method to add shares to a position
+   */
+  private void addPosition(String accountId, String symbol, double amount) {
+    while (true) {
+      try {
+        dbSession = this.getReadCommittedSession();
+        PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+        Position position = positionMapper.selectL(new Position(symbol, accountId));
+        if (position == null) {
+          position = new Position(symbol, amount, accountId);
+          positionMapper.insert(position);
+        } else {
+          position.setAmount(position.getAmount() + amount);
+          positionMapper.update(position);
+        }
+        dbSession.commit();
+        return;
+      } catch (Exception e) {
+        System.out.println("retry addPosition");
+        dbSession.close();
+      }
+    }
+  }
+
+  /**
+   * method to add balance to account
+   */
+  private void addBalance(String accountId, double balance) {
+    while (true) {
+      try {
+        dbSession = this.getReadCommittedSession();
+        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+        Account account = accountMapper.selectOneByIdL(accountId);
+        account.setBalance(account.getBalance() + (balance));
+        accountMapper.updateBalance(account);
+        dbSession.commit();
+        return;
+      } catch (Exception e) {
+        System.out.println("retry addBalance");        
+        dbSession.close();
+      }
+    }
   }
 
   /**
    * Method to insert a transaction to db
    */
   private void insertTransaction(Transaction transaction) {
+    try {
     dbSession = this.getReadCommittedSession();
     TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
     transactionMapper.insert(transaction);
     dbSession.commit();
+    }
+    catch (Exception e) {
+      System.out.println("Error ocurred in inserting transaction");
+      System.out.println(e.getStackTrace());
+    }
   }
 
   /**
