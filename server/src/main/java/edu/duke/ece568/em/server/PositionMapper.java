@@ -10,6 +10,9 @@ public interface PositionMapper {
   final String select = "select * from position where symbol = #{symbol} and account_id = #{accountId}";
   final String selectL = "select * from position where symbol = #{symbol} and account_id = #{accountId} for update of position";
   final String update = "update position set amount = #{amount} where symbol = #{symbol} and account_id = #{accountId}";
+  final String updateAddPosition = "update position set amount = amount + #{amount} where symbol = #{symbol} and account_id = #{accountId}";
+
+
   
   @Insert(insert)
   public void insert(Position position);
@@ -22,4 +25,7 @@ public interface PositionMapper {
   
   @Update(update)
   public void update(Position position);
+
+  @Update(updateAddPosition)
+  public void updateAddPosition(Position position);
 }
