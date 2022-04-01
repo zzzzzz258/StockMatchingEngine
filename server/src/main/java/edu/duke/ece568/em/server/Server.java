@@ -42,7 +42,7 @@ public class Server {
         ClientRequest theClientRequest = new ClientRequest(clientSocket, orderID++);
         Thread theClientThread = new Thread(theClientRequest);
         theClientThread.start();
-        theClientThread.join();
+        //        theClientThread.join();
 
       } catch (Exception e) {
         System.out.println("Error in accepting client request: " + e.getMessage());

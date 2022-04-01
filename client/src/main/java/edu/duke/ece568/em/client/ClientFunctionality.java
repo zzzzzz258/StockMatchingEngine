@@ -36,8 +36,12 @@ public class ClientFunctionality {
       String hostname = "127.0.0.1";
       int portNum = 12345;
       try {
-        OldClient theClient = new OldClient(hostname, portNum);
-        theClient.runSampleCreateTest();
+        NeoClient theClient = new NeoClient(hostname, portNum);
+        if (System.currentTimeMillis()%2 == 0) {
+          theClient.runSampleCreateTest("neo_order1.xml");}
+        else {
+          theClient.runSampleCreateTest("neo_order2.xml");
+        }
       } catch (Exception e) {
         System.out.println("Error in connecting to server: " + e.getMessage());
       }
@@ -61,6 +65,7 @@ public class ClientFunctionality {
    */
   public static void main(String[] args) {
     ClientFunctionality multiClient = new ClientFunctionality();
+    Client.main(new String[] {"neo_create1.xml"});
     // spawn ClientWorker threads
     for (int i = 0; i < multiClient.numOfThreads; i++) {
       Thread clientWorkerThread = new Thread(multiClient.new ClientWorker());

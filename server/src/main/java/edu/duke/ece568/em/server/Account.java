@@ -8,6 +8,10 @@ public class Account {
     accountId = id;
     this.balance = balance;
   }
+
+  public Account(Account o) {
+    this(o.accountId, o.balance);
+  }
   
   public String getAccountId() {
     return accountId;

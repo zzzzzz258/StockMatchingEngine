@@ -39,6 +39,10 @@ public class Order {
   public Order(String symbol, double amount, double limitPrice, String accountId) {
     this(symbol, amount, limitPrice, accountId, Status.OPEN, System.currentTimeMillis());
   }
+
+  public Order(Order other) {
+    this(other.orderId, other.symbol, other.amount, other.limitPrice, other.accountId, other.status, other.time);
+  }
   
   public int getOrderId() {
     return orderId;
