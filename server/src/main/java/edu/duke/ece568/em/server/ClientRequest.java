@@ -279,7 +279,7 @@ public class ClientRequest implements Runnable {
         } else if (tempNodeName.equals("cancel")) {
           cancelOrder(tempNode, accountId);
         } else if (tempNodeName.equals("query")) {
-          // TODO
+          queryOrder(tempNode, accountId);
         } else { // invalid
           Element errorElement = responseToClient.createElement("error");
           addErrorToResponse(errorElement, accountId, null, "Invalid tag:" + tempNodeName);
@@ -756,16 +756,9 @@ public class ClientRequest implements Runnable {
     Element canceled = responseToClient.createElement("canceled");
     canceled.setAttribute("id", orderId);
 
-    tryCancel(orderId, accountId, canceled);
-    
-    // add executed rows
-    dbSession = this.getReadCommittedSession();
-    TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
-    List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
-    addExecutedElements(canceled, transactions);
-    addToResponse(canceled);
-
-    dbSession.close();
+    if (tryCancel(orderId, accountId, canceled)) {
+      addTransactions(orderId, canceled);
+    }
   }
 
   /**
@@ -824,6 +817,67 @@ public class ClientRequest implements Runnable {
         dbSession.close();
       }
     }
+  }
+
+  /**
+   * Method to query an order.
+   */
+  private void queryOrder(Node node, String accountId) {
+    NamedNodeMap attributes = node.getAttributes();
+
+    Node idNode = attributes.getNamedItem("id");
+    String orderId = idNode.getNodeValue();
+
+    Element status = responseToClient.createElement("status");
+    status.setAttribute("id", orderId);
+
+    if (addOrderStatus(orderId, status, accountId)) {      
+      addTransactions(orderId, status);
+    }
+  }
+
+  /**
+   * Method to add open/cancelled order into response to query
+   */
+  private boolean addOrderStatus(String orderId, Element element, String accountId) {
+    dbSession = this.getReadCommittedSession();
+    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+    Order order = orderMapper.selectById(Integer.parseInt(orderId));
+    dbSession.close();    
+    if (order == null || !order.getAccountId().equals(accountId)) {
+      addErrorToResponse(responseToClient.createElement("error"), orderId, null,
+          "Order does not exist or not belong to this account");
+      return false;
+    }
+    if (order.getStatus() == Status.CANCELED) {
+      addCanceledElement(element, order.getAmount(), order.getTime());
+    } else if (order.getStatus() == Status.OPEN) {
+      addOpenElement(element, order.getAmount());
+    }
+    return true;
+  }
+
+  /**
+   * Method to add transactions
+   */
+  private void addTransactions(String orderId, Element element) {
+    // add executed rows
+    dbSession = this.getReadCommittedSession();
+    TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+    List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
+    addExecutedElements(element, transactions);
+    addToResponse(element);
+
+    dbSession.close();
+  }
+
+  /**
+   * Method to add tag open to element*
+   */
+  private void addOpenElement(Node parentNode, double shares) {
+    Element element = responseToClient.createElement("open");
+    element.setAttribute("shares", Double.toString(shares));
+    parentNode.appendChild(element);
   }
 
   /**

@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<transactions id="123456">
+<transactions id="123456">  
+  <query id="1084"/>
+  <query id="1"/>
+  <query id="1085"/>
+  <query id="1086"/>
+  <query id="1087"/>
+  <cancel id="1085"/>
   <cancel id="1086"/>
-  <cancel id = "1085"/>
   <cancel id="1087"/>
 </transactions>
