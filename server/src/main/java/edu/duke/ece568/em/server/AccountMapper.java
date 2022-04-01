@@ -14,6 +14,7 @@ public interface AccountMapper {
   
   final String selectAll = "select * from account";
   final String selectOneByID = "select * from account where account_id = #{accountId}";
+  final String selectOneByIDL = "select * from account where account_id = #{accountId} for update";
   final String insert = "insert into account (account_id, balance) values (#{accountId}, #{balance});";
   final String deleteAll = "delete from account";
   final String updateBalance = "update account set balance = #{balance} where account_id = #{accountId}";
@@ -33,6 +34,13 @@ public interface AccountMapper {
    */
   @Select(selectOneByID)
   Account selectOneById(String accountId);
+
+  /**
+   * Select single row by its account id
+   */
+  @Select(selectOneByIDL)
+  Account selectOneByIdL(String accountId);
+  
   
   /**
    * Insert an account into db

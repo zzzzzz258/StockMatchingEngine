@@ -14,6 +14,7 @@ import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.net.Socket;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 
@@ -28,6 +29,7 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
 import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.TransactionIsolationLevel;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
@@ -173,19 +175,25 @@ public class ClientRequest implements Runnable {
    * @param Document doc
    */
   private void processCreateRequest(Document doc) {
-    try (SqlSession session = SingletonSQLFactory.getInstance().openSession()) {
-      dbSession = session;
-      /*
-       * accountMapper = session.getMapper(AccountMapper.class); positionMapper =
-       * session.getMapper(PositionMapper.class); orderMapper =
-       * session.getMapper(OrderMapper.class);
-       */
-      if (doc.hasChildNodes()) {
-        processCreateRequest_helper(doc.getChildNodes());
-      }
+    if (doc.hasChildNodes()) {
+      processCreateRequest_helper(doc.getChildNodes());
+    }
+  }
 
-      // session.commit();
-    } // end of try
+  /**
+   * Method to get read_committed level session
+   */
+  private SqlSession getManualCommitSession() {
+    return SingletonSQLFactory.getInstance().openSession(false);
+  }
+
+  /**
+   * Method to get read_committed level session
+   */
+  private SqlSession getReadCommittedSession() {
+    return SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.REPEATABLE_READ);
+    // return
+    // SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.READ_COMMITTED);
   }
 
   /**
@@ -194,21 +202,18 @@ public class ClientRequest implements Runnable {
    * @param Document doc
    */
   private void processTransactionRequest(Document doc) {
-    try (SqlSession session = SingletonSQLFactory.getInstance().openSession()) {
-      dbSession = session;
-      Node topLevelNode = doc.getFirstChild();
-      if (topLevelNode.hasChildNodes()) {
-        Node idAttribute = topLevelNode.getAttributes().getNamedItem("id");
-        String accountId = idAttribute == null ? "" : idAttribute.getNodeValue();
-        if (checkAccountIdInTransaction(accountId)) {
-          processTransactionsRequest_helper(topLevelNode.getChildNodes(), accountId);
-        }
-      } else {
-        // response error of not having any children
-        Element errorElement = responseToClient.createElement("error");
-        addErrorToResponse(errorElement, null, null, "No children in transactions request");
+    Node topLevelNode = doc.getFirstChild();
+    if (topLevelNode.hasChildNodes()) {
+      Node idAttribute = topLevelNode.getAttributes().getNamedItem("id");
+      String accountId = idAttribute == null ? "" : idAttribute.getNodeValue();
+      if (checkAccountIdInTransaction(accountId)) {
+        processTransactionsRequest_helper(topLevelNode.getChildNodes(), accountId);
       }
-    } // end of try
+    } else {
+      // response error of not having any children
+      Element errorElement = responseToClient.createElement("error");
+      addErrorToResponse(errorElement, null, null, "No children in transactions request");
+    }
   }
 
   /**
@@ -269,14 +274,12 @@ public class ClientRequest implements Runnable {
           // put order into db
           Order newOrder = addOrder(tempNode, accountId);
           if (newOrder != null) {
-            System.out.println(newOrder);
             tryMatchOrder(newOrder);
           }
         } else if (tempNodeName.equals("cancel")) {
-          // TODO
           cancelOrder(tempNode, accountId);
         } else if (tempNodeName.equals("query")) {
-          // TODO
+          queryOrder(tempNode, accountId);
         } else { // invalid
           Element errorElement = responseToClient.createElement("error");
           addErrorToResponse(errorElement, accountId, null, "Invalid tag:" + tempNodeName);
@@ -343,9 +346,12 @@ public class ClientRequest implements Runnable {
 
     } else {
       try {
+        dbSession = SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.READ_COMMITTED);
+
         Account newAccount = new Account(id, Integer.parseInt(balance, 10));
         AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
         accountMapper.insert(newAccount);
+
         dbSession.commit();
 
         Element successElement = responseToClient.createElement("created");
@@ -366,6 +372,7 @@ public class ClientRequest implements Runnable {
    * @param the xml document
    */
   private boolean checkAccountIdInTransaction(String accountId) {
+    dbSession = this.getReadCommittedSession();
     if (accountId.isEmpty()) {
       // transactions order must have a account id attribute in root tag
       Element errorElement = responseToClient.createElement("error");
@@ -374,6 +381,7 @@ public class ClientRequest implements Runnable {
     }
     AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
     Account account = accountMapper.selectOneById(accountId);
+    dbSession.close();
     if (account == null) {
       Element errorElement = responseToClient.createElement("error");
       addErrorToResponse(errorElement, accountId, null, "given account does not exist");
@@ -406,20 +414,8 @@ public class ClientRequest implements Runnable {
     } else {
       try {
         Position newPosition = new Position(symVal, Double.parseDouble(share), id);
-        // System.out.println("Sym: " + newPosition.getSymbol() + " Account: " +
-        // newPosition.getAccountId());
-        PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
 
-        // first check if the symbol already exists
-        Position existingSym = positionMapper.select(newPosition);
-        if (existingSym == null) { // new symbol
-          positionMapper.insert(newPosition);
-        } else { // just update the balance
-          newPosition.setAmount(newPosition.getAmount() + existingSym.getAmount());
-          positionMapper.update(newPosition);
-        }
-
-        dbSession.commit();
+        insertPosition(newPosition);
 
         Element successElement = responseToClient.createElement("created");
         addSuccessToResponse(successElement, id, symVal);
@@ -428,7 +424,36 @@ public class ClientRequest implements Runnable {
         addErrorToResponse(errorElement, id, null, e.getMessage());
       }
     }
+  }
 
+  /**
+   * Insert position into db
+   */
+  private void insertPosition(Position newPosition) {
+    while (true) {
+      try {
+        dbSession = SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.READ_COMMITTED);
+        PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+        // first check if the symbol already exists
+        Position existingSym = positionMapper.selectL(newPosition);
+        if (existingSym == null) { // new symbol
+          positionMapper.insert(newPosition); // race condition in inserting
+        } else { // just update the balance
+          Position targetPosition = new Position(newPosition.getSymbol(),
+              newPosition.getAmount() + existingSym.getAmount(), newPosition.getAccountId());
+          positionMapper.update(targetPosition);
+        }
+
+        dbSession.commit();
+        break;
+      } catch (Exception e) {
+        if (e instanceof SQLException) {
+          dbSession.close();
+        } else {
+          break;
+        }
+      }
+    }
   }
 
   /**
@@ -443,12 +468,7 @@ public class ClientRequest implements Runnable {
     if (newOrder == null) {
       return null;
     }
-    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-    AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
-    PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
-
     double orderAmount = newOrder.getAmount();
-    Account account = accountMapper.selectOneById(accountId);
     if (orderAmount == 0) {
       // rejected
       Element errorElement = responseToClient.createElement("error");
@@ -456,17 +476,7 @@ public class ClientRequest implements Runnable {
       return null;
     } else if (orderAmount > 0) {
       // a buy order
-      double orderPrice = newOrder.getLimitPrice();
-      double totalCost = orderAmount * orderPrice;
-      double currentBalance = account.getBalance();
-      if (totalCost <= currentBalance) {
-        currentBalance -= totalCost;
-        account.setBalance(currentBalance);
-        // update account balance
-        accountMapper.updateBalance(account);
-        // insert into database
-        orderMapper.insert(newOrder);
-        dbSession.commit();
+      if (insertBuyOrder(newOrder, accountId) == true) {
         // send reponse
         addOpenToResponse(responseToClient.createElement("opened"), newOrder);
       } else {
@@ -475,10 +485,68 @@ public class ClientRequest implements Runnable {
       } // end if
     } else { // orderAmount < 0
       // sell order
-      orderAmount = -orderAmount;
-      Position position = new Position(newOrder.getSymbol(), accountId);
-      position = positionMapper.select(position);
-      double positionAmount = position == null ? 0 : position.getAmount();
+      if (insertSellOrder(newOrder, accountId)) {
+        // send response
+        addOpenToResponse(responseToClient.createElement("opened"), newOrder);
+      } else {
+        addErrorToResponse(responseToClient.createElement("error"), newOrder, "You don't enough to sell");
+      } // end if
+    } // end orderAmount condition
+    return newOrder;
+  }
+
+  /**
+   * Insert Buy order to db and update account balance
+   *
+   * @return true if order placed successfully
+   */
+  private boolean insertBuyOrder(Order newOrder, String accountId) {
+    dbSession = this.getReadCommittedSession();
+    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+    AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+
+    Account account = accountMapper.selectOneById(accountId);
+
+    double orderAmount = newOrder.getAmount();
+    double orderPrice = newOrder.getLimitPrice();
+    double totalCost = orderAmount * orderPrice;
+    double currentBalance = account.getBalance();
+    try {
+      if (totalCost <= currentBalance) {
+        currentBalance -= totalCost;
+        account.setBalance(currentBalance);
+        // update account balance
+        accountMapper.updateBalance(account);
+        // insert into database
+        orderMapper.insert(newOrder);
+        dbSession.commit();
+        return true;
+      } else {
+        return false;
+      }
+    } // end try
+    catch (Exception e) {
+      System.out.println("retry buy");
+      dbSession.close();
+      return insertBuyOrder(newOrder, accountId);
+    }
+  }
+
+  /**
+   * Insert sell order to db and update position shares
+   *
+   * @return true if order placed
+   */
+  private boolean insertSellOrder(Order newOrder, String accountId) {
+    dbSession = this.getReadCommittedSession();
+    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+    PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+
+    double orderAmount = -newOrder.getAmount();
+    Position position = new Position(newOrder.getSymbol(), accountId);
+    position = positionMapper.select(position);
+    double positionAmount = position == null ? 0 : position.getAmount();
+    try {
       if (orderAmount <= positionAmount) {
         // update position amount
         positionAmount -= orderAmount;
@@ -487,13 +555,15 @@ public class ClientRequest implements Runnable {
         // insert into database
         orderMapper.insert(newOrder);
         dbSession.commit();
-        // send response
-        addOpenToResponse(responseToClient.createElement("opened"), newOrder);
+        return true;
       } else {
-        addErrorToResponse(responseToClient.createElement("error"), newOrder, "You don't enough to sell");
-      } // end if
-    } // end orderAmount condition
-    return newOrder;
+        return false;
+      }
+    } catch (Exception e) {
+      System.out.println("retry buy");
+      dbSession.close();
+      return insertSellOrder(newOrder, accountId);
+    }
   }
 
   /**
@@ -530,107 +600,148 @@ public class ClientRequest implements Runnable {
    * @param newOrder is new order
    */
   private void tryMatchOrder(Order newOrder) {
-    // select possible matching orders
-    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
     if (newOrder.getAmount() < 0) { // sell order, look for buy order
-      List<Order> qualifiedOrders = orderMapper.selectBuyOrderByLowestPrice(newOrder);
-      if (qualifiedOrders.size() > 0) {
-        matchOrders(newOrder, qualifiedOrders);
-      } // end if
+
+      matchOrder(newOrder, true);
     } else { // buy order, look for sell order
-      List<Order> qualifiedOrders = orderMapper.selectSellOrderByHighestPrice(newOrder);
-      if (qualifiedOrders.size() > 0) {
-        matchOrders(newOrder, qualifiedOrders);
-      } // end if
+      matchOrder(newOrder, false);
     }
   }
 
   /**
-   * Method do matching logics. Record transactions
+   * Method to match and execute sell order
    */
-  private void matchOrders(Order newOrder, List<Order> qualifiedOrders) {
-    for (Order candidate : qualifiedOrders) {
-      if (newOrder.getStatus() == Status.COMPLETE) {
-        return;
+  private void matchOrder(Order newOrder, boolean ifSell) {
+    while (true) {
+      try {
+        dbSession = this.getReadCommittedSession();
+        // dbSession = this.getManualCommitSession();
+        OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+
+        PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+
+        newOrder = orderMapper.selectByIdL(newOrder.getOrderId());
+        // temp and swap
+        Order seller = ifSell ? new Order(newOrder) : orderMapper.selectSellOrder(newOrder);
+        Order buyer = ifSell ? orderMapper.selectBuyOrder(newOrder) : new Order(newOrder);
+        if (seller == null || buyer == null) {
+          dbSession.close();
+          return;
+        }
+        double matchPrice = seller.getTime() < buyer.getTime() ? seller.getLimitPrice() : buyer.getLimitPrice();
+        double matchAmount = Math.min(Math.abs(seller.getAmount()), Math.abs(buyer.getAmount()));
+
+        Transaction sellTransaction = doSellBusiness(seller, matchAmount, matchPrice);
+        Transaction buyTransaction = doBuyBusiness(buyer, matchAmount, matchPrice);
+
+        if (seller.getAmount() == 0)
+          seller.setStatus(Status.COMPLETE);
+        if (buyer.getAmount() == 0)
+          buyer.setStatus(Status.COMPLETE);
+
+        orderMapper.updateAmountStatusById(seller);
+        orderMapper.updateAmountStatusById(buyer);
+
+        dbSession.commit();
+
+        // add balance to account, add shraes to position
+        addBalance(newOrder.getAccountId(), matchAmount * matchPrice);
+        addPosition(newOrder.getAccountId(), newOrder.getSymbol(), matchAmount);
+        if (buyer.getLimitPrice() > matchPrice) { // refund
+          addBalance(newOrder.getAccountId(), matchAmount * (buyer.getLimitPrice() - matchPrice));
+        }
+
+        // insert transaction
+        insertTransaction(sellTransaction);
+        insertTransaction(buyTransaction);
+
+        // change new order status
+        newOrder = ifSell ? seller : buyer;
+        if (newOrder.getStatus() == Status.COMPLETE) {
+          return;
+        }
+      } catch (Exception e) {
+        System.out.println("Retry match order");
+        dbSession.close();
       }
-      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
-
-      double matchPrice = newOrder.getTime() < candidate.getTime() ? newOrder.getLimitPrice()
-          : candidate.getLimitPrice();
-      double matchAmount = Math.min(Math.abs(newOrder.getAmount()), Math.abs(candidate.getAmount()));
-      matchOrders_helper(newOrder, orderMapper, transactionMapper, matchPrice, matchAmount);
-      matchOrders_helper(candidate, orderMapper, transactionMapper, matchPrice, matchAmount);
-    } // end for
-  }
-
-  /**
-   * Helper method in match orders
-   */
-  private void matchOrders_helper(Order order, OrderMapper orderMapper, TransactionMapper transactionMapper,
-      double matchPrice, double matchAmount) {
-    // do business, transfer shares, transfer money, refund if needed
-    Transaction orderTransaction = doBusiness(order, matchPrice, matchAmount);
-    // update two orders to db
-    if (order.getAmount() == 0) {
-      order.setStatus(Status.COMPLETE);
-    }
-    orderMapper.updateAmountStatusById(order);
-    // create relative transactions and insert
-    transactionMapper.insert(orderTransaction);
-  }
-
-  /**
-   * Method to do logical business, transfer shares and money, refund if needed
-   * 
-   * @return Transaction record of this business
-   */
-  private Transaction doBusiness(Order order, double price, double amount) {
-    AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
-    PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
-    Account account = accountMapper.selectOneById(order.getAccountId());
-    if (order.getAmount() > 0) { // buy
-      return doBuyBusiness(order, account, accountMapper, positionMapper, amount, price);
-    } else { // sell
-      return doSellBusiness(order, account, accountMapper, amount, price);
     }
   }
 
   /**
    * Method to do logics in buy operation
    */
-  private Transaction doBuyBusiness(Order order, Account account, AccountMapper accountMapper,
-      PositionMapper positionMapper, double amount, double price) {
-    // update amount in order, and account's position
-    Position position = positionMapper.select(new Position(order.getSymbol(), account.getAccountId()));
-    double primitivePrice = order.getLimitPrice();
+  private Transaction doBuyBusiness(Order order, double amount, double price) {
     order.setAmount(order.getAmount() - amount);
-    if (position == null) {
-      position = new Position(order.getSymbol(), amount, account.getAccountId());
-      positionMapper.insert(position);
-    } else {
-      position.setAmount(position.getAmount() + amount);
-      positionMapper.update(position);
-    }
-    // refund if necessary
-    if (primitivePrice > price) {
-      double refund = (primitivePrice - price) * amount;
-      account.setBalance(account.getBalance() + refund);
-      accountMapper.updateBalance(account);
-    } // endif
     return new Transaction(order.getOrderId(), amount, price);
   }
 
   /**
    * Method to de logics in sell operation
    */
-  private Transaction doSellBusiness(Order order, Account account, AccountMapper accountMapper, double amount,
-      double price) {
+  private Transaction doSellBusiness(Order order, double amount, double price) {
     // update amount in order, and account's balance
     order.setAmount(order.getAmount() + amount);
-    account.setBalance(account.getBalance() + (price * amount));
-    accountMapper.updateBalance(account);
     return new Transaction(order.getOrderId(), -amount, price);
+  }
+
+  /**
+   * Method to add shares to a position
+   */
+  private void addPosition(String accountId, String symbol, double amount) {
+    while (true) {
+      try {
+        dbSession = this.getReadCommittedSession();
+        PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+        Position position = positionMapper.selectL(new Position(symbol, accountId));
+        if (position == null) {
+          position = new Position(symbol, amount, accountId);
+          positionMapper.insert(position);
+        } else {
+          position.setAmount(position.getAmount() + amount);
+          positionMapper.update(position);
+        }
+        dbSession.commit();
+        return;
+      } catch (Exception e) {
+        System.out.println("retry addPosition");
+        dbSession.close();
+      }
+    }
+  }
+
+  /**
+   * method to add balance to account
+   */
+  private void addBalance(String accountId, double balance) {
+    while (true) {
+      try {
+        dbSession = this.getReadCommittedSession();
+        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+        Account account = accountMapper.selectOneByIdL(accountId);
+        account.setBalance(account.getBalance() + (balance));
+        accountMapper.updateBalance(account);
+        dbSession.commit();
+        return;
+      } catch (Exception e) {
+        System.out.println("retry addBalance");
+        dbSession.close();
+      }
+    }
+  }
+
+  /**
+   * Method to insert a transaction to db
+   */
+  private void insertTransaction(Transaction transaction) {
+    try {
+      dbSession = this.getReadCommittedSession();
+      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+      transactionMapper.insert(transaction);
+      dbSession.commit();
+    } catch (Exception e) {
+      System.out.println("Error ocurred in inserting transaction");
+      System.out.println(e.getStackTrace());
+    }
   }
 
   /**
@@ -639,55 +750,134 @@ public class ClientRequest implements Runnable {
   private void cancelOrder(Node node, String accountId) {
     NamedNodeMap attributes = node.getAttributes();
 
-    try {
-      Node idNode = attributes.getNamedItem("id");
-      String orderId = idNode.getNodeValue();
+    Node idNode = attributes.getNamedItem("id");
+    String orderId = idNode.getNodeValue();
 
-      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-      AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
-      PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
-      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+    Element canceled = responseToClient.createElement("canceled");
+    canceled.setAttribute("id", orderId);
 
-      Account account = accountMapper.selectOneById(accountId);
-      Order order = orderMapper.selectById(Integer.parseInt(orderId));
-      Position position = positionMapper.select(new Position(order.getSymbol(), accountId));
-
-      if (!order.getAccountId().equals(accountId)) { // order and account not match
-        addErrorToResponse(responseToClient.createElement("error"), orderId, null,
-            "cancel fails, order does not belong to this account");
-        return;
-      } // end if
-
-      Element canceled = responseToClient.createElement("canceled");
-      canceled.setAttribute("id", orderId);
-
-      if (order.getStatus() == Status.OPEN) { // cancel it, return shares or funds
-        if (order.getAmount() > 0) { // buy order, refund
-          double refund = order.getAmount() * order.getLimitPrice();
-          account.setBalance(account.getBalance() + refund);
-          accountMapper.updateBalance(account);
-        } else { // sell order, return
-          double returnShares = order.getAmount();
-          position.setAmount(position.getAmount() + returnShares);
-          positionMapper.update(position);
-        }
-        // cancel order, add to response
-        order.setStatus(Status.CANCELED);
-        order.setTime(System.currentTimeMillis());
-        orderMapper.cancelById(order);
-        addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());
-      } // endif
-
-      // add executed rows
-      List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
-      System.out.println(transactions.size());
-      addExecutedElements(canceled, transactions);
-      addToResponse(canceled);
-
-      dbSession.commit();
-    } catch (NullPointerException e) {
-      addErrorToResponse(responseToClient.createElement("error"), accountId, null, "order not found");
+    if (tryCancel(orderId, accountId, canceled)) {
+      addTransactions(orderId, canceled);
     }
+  }
+
+  /**
+   * Method to try to cancel an order
+   *
+   * @return true if canceled or complete, false if order and account no match
+   */
+  private boolean tryCancel(String orderId, String accountId, Element canceled) {
+    while (true) {
+      try {
+        dbSession = this.getReadCommittedSession();
+
+        OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+        Order order = orderMapper.selectByIdL(Integer.parseInt(orderId));        
+
+        if (order == null || !order.getAccountId().equals(accountId)) { // order and account not match
+          addErrorToResponse(responseToClient.createElement("error"), orderId, null,
+              "cancel fails, order does not exist or not belong to this account");
+          dbSession.close();
+          return false;
+        } // end if
+
+        if (order.getStatus() == Status.OPEN) { // cancel it, return shares or funds
+          System.out.println("Found open order to cancel");
+          
+          // cancel order, add to response
+          order.setStatus(Status.CANCELED);
+          order.setTime(System.currentTimeMillis());
+          orderMapper.cancelById(order);
+
+          dbSession.commit();
+
+          if (order.getAmount() > 0) { // buy order, refund
+            double refund = order.getAmount() * order.getLimitPrice();
+            addBalance(accountId, refund);
+          } else { // sell order, return
+            double returnShares = order.getAmount();
+            addPosition(accountId, order.getSymbol(), returnShares);
+          }
+          
+          addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());
+          return true;
+        } // endif
+        else if (order.getStatus() == Status.CANCELED) {
+          dbSession.close();
+          addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());
+          return true;
+        }
+        else { // complete
+          dbSession.close();
+          return true;
+        }
+      } catch (Exception e) {
+        System.out.println("Retry cancel " + orderId);
+        System.out.println(e.getMessage());
+        dbSession.close();
+      }
+    }
+  }
+
+  /**
+   * Method to query an order.
+   */
+  private void queryOrder(Node node, String accountId) {
+    NamedNodeMap attributes = node.getAttributes();
+
+    Node idNode = attributes.getNamedItem("id");
+    String orderId = idNode.getNodeValue();
+
+    Element status = responseToClient.createElement("status");
+    status.setAttribute("id", orderId);
+
+    if (addOrderStatus(orderId, status, accountId)) {      
+      addTransactions(orderId, status);
+    }
+  }
+
+  /**
+   * Method to add open/cancelled order into response to query
+   */
+  private boolean addOrderStatus(String orderId, Element element, String accountId) {
+    dbSession = this.getReadCommittedSession();
+    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+    Order order = orderMapper.selectById(Integer.parseInt(orderId));
+    dbSession.close();    
+    if (order == null || !order.getAccountId().equals(accountId)) {
+      addErrorToResponse(responseToClient.createElement("error"), orderId, null,
+          "Order does not exist or not belong to this account");
+      return false;
+    }
+    if (order.getStatus() == Status.CANCELED) {
+      addCanceledElement(element, order.getAmount(), order.getTime());
+    } else if (order.getStatus() == Status.OPEN) {
+      addOpenElement(element, order.getAmount());
+    }
+    return true;
+  }
+
+  /**
+   * Method to add transactions
+   */
+  private void addTransactions(String orderId, Element element) {
+    // add executed rows
+    dbSession = this.getReadCommittedSession();
+    TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+    List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
+    addExecutedElements(element, transactions);
+    addToResponse(element);
+
+    dbSession.close();
+  }
+
+  /**
+   * Method to add tag open to element*
+   */
+  private void addOpenElement(Node parentNode, double shares) {
+    Element element = responseToClient.createElement("open");
+    element.setAttribute("shares", Double.toString(shares));
+    parentNode.appendChild(element);
   }
 
   /**
@@ -708,7 +898,7 @@ public class ClientRequest implements Runnable {
       Element executed = responseToClient.createElement("executed");
       executed.setAttribute("shares", Double.toString(Math.abs(t.getAmount())));
       executed.setAttribute("price", Double.toString(t.getPrice()));
-      executed.setAttribute("time", Double.toString(t.getTime() / 1000));
+      executed.setAttribute("time", Long.toString(t.getTime() / 1000));
       parentNode.appendChild(executed);
     }
   }

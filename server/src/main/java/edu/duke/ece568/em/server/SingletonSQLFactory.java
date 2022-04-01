@@ -6,6 +6,7 @@ import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+import org.apache.ibatis.session.TransactionIsolationLevel;
 import org.apache.ibatis.transaction.TransactionFactory;
 import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 
@@ -45,6 +46,20 @@ public class SingletonSQLFactory {
     return getSqlSessionFactory().openSession();
   }
 
+  /**
+   * Method to open a new session with autoCommitted
+   */
+  public SqlSession openSession(boolean autoCommitted) {
+    return getSqlSessionFactory().openSession(autoCommitted);
+  }
+
+  /**
+   * Method to open a new session with IsolationLevel
+   */
+  public SqlSession openSession(TransactionIsolationLevel level) {
+    return getSqlSessionFactory().openSession(level);
+  }
+  
   /**
    * Connect to the postgresql database.
    * 
