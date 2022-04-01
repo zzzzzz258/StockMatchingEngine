@@ -22,6 +22,7 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
 import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.TransactionIsolationLevel;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
@@ -52,7 +53,7 @@ public class ClientRequest implements Runnable {
     startDocBuilder();
     createNewResponse();
   }
-
+  
   /**
    * Method to initialize XML doc builder which will be used for both reading and
    * writing
@@ -166,18 +167,11 @@ public class ClientRequest implements Runnable {
    * @param Document doc
    */
   private void processCreateRequest(Document doc) {
-    try (SqlSession session = SingletonSQLFactory.getInstance().openSession()) {
+    try (SqlSession session = SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.REPEATABLE_READ)) {
       dbSession = session;
-      /*
-       * accountMapper = session.getMapper(AccountMapper.class); positionMapper =
-       * session.getMapper(PositionMapper.class); orderMapper =
-       * session.getMapper(OrderMapper.class);
-       */
       if (doc.hasChildNodes()) {
         processCreateRequest_helper(doc.getChildNodes());
       }
-
-      // session.commit();
     } // end of try
   }
 
@@ -187,7 +181,7 @@ public class ClientRequest implements Runnable {
    * @param Document doc
    */
   private void processTransactionRequest(Document doc) {
-    try (SqlSession session = SingletonSQLFactory.getInstance().openSession()) {
+    try (SqlSession session = SingletonSQLFactory.getInstance().openSession(TransactionIsolationLevel.REPEATABLE_READ)) {
       dbSession = session;
       Node topLevelNode = doc.getFirstChild();
       if (topLevelNode.hasChildNodes()) {
@@ -339,6 +333,7 @@ public class ClientRequest implements Runnable {
         Account newAccount = new Account(id, Integer.parseInt(balance, 10));
         AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
         accountMapper.insert(newAccount);
+
         dbSession.commit();
 
         Element successElement = responseToClient.createElement("created");
@@ -404,14 +399,14 @@ public class ClientRequest implements Runnable {
         PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
 
         // first check if the symbol already exists
-        Position existingSym = positionMapper.select(newPosition);
+        Position existingSym = positionMapper.selectL(newPosition);
         if (existingSym == null) { // new symbol
-          positionMapper.insert(newPosition);
+          positionMapper.insert(newPosition);  // race condition in inserting
         } else { // just update the balance
           newPosition.setAmount(newPosition.getAmount() + existingSym.getAmount());
           positionMapper.update(newPosition);
         }
-
+        // Theretically, there should be a retry check
         dbSession.commit();
 
         Element successElement = responseToClient.createElement("created");
@@ -421,7 +416,6 @@ public class ClientRequest implements Runnable {
         addErrorToResponse(errorElement, id, null, e.getMessage());
       }
     }
-
   }
 
   /**
