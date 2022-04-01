@@ -3,11 +3,16 @@ package edu.duke.ece568.em.server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class Server {
   private final int listenerPort;
   private final ServerSocket theServerSocket;
 
+  private ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(4, 60, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+  
   /**
    * Constructor to setup the Server
    * 
@@ -40,8 +45,9 @@ public class Server {
         Socket clientSocket = theServerSocket.accept();
         // Create a thread to process that request
         ClientRequest theClientRequest = new ClientRequest(clientSocket, orderID++);
-        Thread theClientThread = new Thread(theClientRequest);
-        theClientThread.start();
+        //Thread theClientThread = new Thread(theClientRequest);
+        //theClientThread.start();
+        threadPoolExecutor.submit(theClientRequest);
       } catch (Exception e) {
         System.out.println("Error in accepting client request: " + e.getMessage());
       }
