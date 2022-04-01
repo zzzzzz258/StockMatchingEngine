@@ -10,7 +10,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.StringReader;
-import java.io.StringWriter;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.List;
@@ -780,30 +779,20 @@ public class ClientRequest implements Runnable {
    */
   private void sendResponseToClient() {
     try {
-      // First convert the xml to string
+      System.out.println("Response to cliemt: " + responseToClient.toString()
+
+                         );
+      String lengthOfXML = "" + responseToClient.toString().length();
+      responseToClient.createTextNode(lengthOfXML);
       TransformerFactory transformerFactory = TransformerFactory.newInstance();
       Transformer transformer = transformerFactory.newTransformer();
       DOMSource source = new DOMSource(responseToClient);
-      StringWriter writer = new StringWriter();
+      OutputStream output = theClientSocket.getOutputStream();
+      StreamResult result = new StreamResult(output);
       // pretty print
       transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-      transformer.transform(source, new StreamResult(writer));
-      String xmlString = writer.getBuffer().toString();
-
-      // Add the size of the xml at the beginning
-      int lengthOfXML = xmlString.length();
-      xmlString = lengthOfXML + "\n" + xmlString;
-
-      // get the output stream from the socket.
-      OutputStream outputStream = theClientSocket.getOutputStream();
-      // create a data output stream from the output stream so we can send data
-      // through it
-      DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-
-      // write the message we want to send
-      dataOutputStream.writeUTF(xmlString);
-      dataOutputStream.flush(); // send the message
-      dataOutputStream.close(); // close the output stream when we're done.
+      transformer.transform(source, result);
+      
     } catch (Exception e) {
       System.out.println("Error in sending response to client: " + e.getMessage());
     }

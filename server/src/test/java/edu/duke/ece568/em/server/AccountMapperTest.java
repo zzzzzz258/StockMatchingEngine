@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 public class AccountMapperTest {
   @Test
   public void test_Everything() {
-    SqlSessionFactory ssf = Server.getSqlSessionFactory();
+    SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 
     try (SqlSession session = ssf.openSession()) {
       AccountMapper accountMapper = session.getMapper(AccountMapper.class);
@@ -25,7 +25,12 @@ public class AccountMapperTest {
       assertEquals(a, a1);
       Account a2 = accountMapper.selectOneById("1233");
       assertNull(a2);
-
+      
+      a.setBalance(130);
+      accountMapper.updateBalance(a);
+      Account a3 = accountMapper.selectOneById("1234");
+      assertEquals(130, a3.getBalance());
+      
       accountMapper.deleteAll();
       List<Account> as = accountMapper.selectAll();
       assertEquals(0, as.size());

@@ -1,6 +1,8 @@
 package edu.duke.ece568.em.client;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -9,6 +11,8 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.net.URL;
+import java.util.Scanner;
 
 public class Client {
   Socket theClientSocket;
@@ -24,13 +28,27 @@ public class Client {
 
   /**
    * Main method for Client Application
+   * @param the name of xml file to be used
    */
   public static void main(String[] args) {
+    if (args.length != 1) {
+      System.out.println("One argument of xml file name is required.");
+      return;
+    }
     String hostname = "127.0.0.1";
     int portNum = 12345;
+    String xmlFile = args[0];
     try {
       Client theClient = new Client(hostname, portNum);
-      theClient.runSampleCreateTest();
+      /*
+       * String msg = "Client is ready!"; theClient.sendToServer(msg); msg =
+       * (String)theClient.receiveFromServer(); System.out.println("Server sent: " +
+       * msg);
+       */
+      theClient.sendRequestToServer(xmlFile);
+      String msg = (String) theClient.receiveResponseFromServer();
+      System.out.println("Server sent: " + msg);
+
     } catch (Exception e) {
       System.out.println("Error in connecting to server: " + e.getMessage());
     }
@@ -85,7 +103,30 @@ public class Client {
   }
 
   /**
-   * Method to send a request
+   * Read a file
+   * @param the location of file
+   * @return a string of contents in file
+   */
+  private String readFile(String filePath) {
+    StringBuilder sb = new StringBuilder();
+    try {
+      File myObj = new File(filePath);
+      Scanner myReader = new Scanner(myObj);
+      while (myReader.hasNextLine()) {
+        String data = myReader.nextLine();
+        //        System.out.println(data);
+        sb.append(data);
+      }
+      myReader.close();
+    } catch (FileNotFoundException e) {
+      System.out.println("XML file not found.");
+      e.printStackTrace();
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Method to send a sample create request to server
    */
   private void sendSampleCreateRequest() throws IOException {
     String accountID = "123456";
@@ -95,12 +136,23 @@ public class Client {
 
   /**
    * Method to send a request
+   * @param accountID and symbol
    */
   private void sendSampleCreateRequest(String accountID, String sym) throws IOException {
     String req = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<create>\n" + "<account id=\"" + accountID
         + "\" balance=\"1000\"/>\n" + "<symbol sym=\"" + sym + "\">\n" + "<account id=\"" + accountID
         + "\">100000</account>\n" + "</symbol>\n" + "</create>";
-
+        req = req.length() + "\n" + req;
+    PrintWriter out = new PrintWriter(theClientSocket.getOutputStream(), true);
+    out.println(req);
+  }
+  
+  /**
+   * Method to send a request
+   * @param xmlFile is name of xml file to use
+   */
+  private void sendRequestToServer(String xmlFile) throws IOException {  
+    String req = readFile("orders/" + xmlFile);
     req = req.length() + "\n" + req;
     PrintWriter out = new PrintWriter(theClientSocket.getOutputStream(), true);
     out.println(req);
@@ -116,6 +168,7 @@ public class Client {
     String input;
     while ((input = in.readLine()) != null) {
       response.append(input);
+      response.append("\n");
     }
     return response.toString();
   }

@@ -11,7 +11,7 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 
 public class OrderMapperTest {
-  public void addRows(OrderMapper om) {
+  public static void addRows(OrderMapper om) {
     Order o1 = new Order("TLSA", -100, 100, "1");
     Order o2 = new Order("TLSA", -105, 105, "1");
     Order o3 = new Order("TLSA", -110, 105, "1");
@@ -31,11 +31,13 @@ public class OrderMapperTest {
 
     om.insert(o11);
     om.insert(o12);    
+
+    System.out.println(o11);
   }
 
   @Test
   public void test_All() {
-    SqlSessionFactory ssf = Server.getSqlSessionFactory();
+    SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 
     try (SqlSession session = ssf.openSession()) {
       AccountMapper accountMapper = session.getMapper(AccountMapper.class);
@@ -72,7 +74,7 @@ public class OrderMapperTest {
       om.cancelById(or1);
       om.executeById(or2);
       or3.setAmount(9999);
-      om.updateAmountById(or3);
+      om.updateAmountStatusById(or3);
 
       oss = om.selectAll();
       Map<Integer, Order> osmap = new HashMap<Integer, Order>();

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<transactions id="123456">
+  <order sym="SYM" amount="500" limit="33.45"/>
+  <order sym="GOOG" amount="-100" limit="33.45"/>
+  <order sym="FB" amount="00" limit="33.45"/>
+  <order sym="FB" amont="-100" limit="3.45"/>
+</transactions>

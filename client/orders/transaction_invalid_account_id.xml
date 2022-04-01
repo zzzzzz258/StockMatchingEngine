@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<transactions id="674893613">
+  <order sym="SYM" amount="AMT" limit="LMT"/>
+  <query id="TRANS_ID"/>
+  <cancel id="TRANS_ID"/>
+</transactions>

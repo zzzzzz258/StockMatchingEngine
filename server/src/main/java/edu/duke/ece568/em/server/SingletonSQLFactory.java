@@ -61,7 +61,8 @@ public class SingletonSQLFactory {
       configuration.addMapper(AccountMapper.class);
       configuration.addMapper(PositionMapper.class);
       configuration.addMapper(OrderMapper.class);
-
+      configuration.addMapper(TransactionMapper.class);
+      
       sqlSessionFactory = new SqlSessionFactoryBuilder().build(configuration);
     }
     return sqlSessionFactory;
