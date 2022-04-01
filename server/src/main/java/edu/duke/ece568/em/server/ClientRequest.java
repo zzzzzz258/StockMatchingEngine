@@ -342,7 +342,7 @@ public class ClientRequest implements Runnable {
       addErrorToResponse(errorElement, id, null, "Invalid request");
 
     } else {
-      try (SqlSession dbSession = this.getDefaultSession()) {                
+      try (SqlSession dbSession = this.getDefaultSession()) {
         AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
         accountMapper.insert(new Account(id, Double.parseDouble(balance)));
 
@@ -430,7 +430,7 @@ public class ClientRequest implements Runnable {
    */
   private void insertPosition(Position newPosition) {
     while (true) {
-      try (SqlSession dbSession = this.getDefaultSession();) {        
+      try (SqlSession dbSession = this.getDefaultSession();) {
         PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
         // first check if the symbol already exists
         Position existingSym = positionMapper.select(newPosition);
@@ -442,7 +442,7 @@ public class ClientRequest implements Runnable {
           positionMapper.updateAddPosition(newPosition);
         }
 
-        //        dbSession.commit();
+        // dbSession.commit();
         return;
       } catch (Exception e) {
       }
@@ -494,34 +494,29 @@ public class ClientRequest implements Runnable {
    * @return true if order placed successfully
    */
   private boolean insertBuyOrder(Order newOrder, String accountId) {
-    dbSession = this.getReadCommittedSession();
-    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-    AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+    try (SqlSession dbSession = this.getDefaultSession()) {
+      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+      AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
 
-    Account account = accountMapper.selectOneById(accountId);
+      double orderAmount = newOrder.getAmount();
+      double orderPrice = newOrder.getLimitPrice();
+      double totalCost = orderAmount * orderPrice;
 
-    double orderAmount = newOrder.getAmount();
-    double orderPrice = newOrder.getLimitPrice();
-    double totalCost = orderAmount * orderPrice;
-    double currentBalance = account.getBalance();
-    try {
-      if (totalCost <= currentBalance) {
-        currentBalance -= totalCost;
-        account.setBalance(currentBalance);
+      Account offset = new Account(accountId, totalCost);
+      accountMapper.updateRemoveBalance(offset);
+      Account account = accountMapper.selectOneById(accountId);
+
+      double currentBalance = account.getBalance();
+
+      if (currentBalance < 0) {
         // update account balance
-        accountMapper.updateBalance(account);
+        accountMapper.updateAddBalance(offset);
+        return false;
+      } else {
         // insert into database
         orderMapper.insert(newOrder);
-        dbSession.commit();
-        return true;
-      } else {
         return false;
       }
-    } // end try
-    catch (Exception e) {
-      System.out.println("retry buy");
-      dbSession.close();
-      return insertBuyOrder(newOrder, accountId);
     }
   }
 
@@ -531,31 +526,29 @@ public class ClientRequest implements Runnable {
    * @return true if order placed
    */
   private boolean insertSellOrder(Order newOrder, String accountId) {
-    dbSession = this.getReadCommittedSession();
-    OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-    PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
+    try (SqlSession dbSession = this.getDefaultSession()) {
+      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
+      PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
 
-    double orderAmount = -newOrder.getAmount();
-    Position position = new Position(newOrder.getSymbol(), accountId);
-    position = positionMapper.select(position);
-    double positionAmount = position == null ? 0 : position.getAmount();
-    try {
-      if (orderAmount <= positionAmount) {
-        // update position amount
-        positionAmount -= orderAmount;
-        position.setAmount(positionAmount);
-        positionMapper.update(position);
-        // insert into database
-        orderMapper.insert(newOrder);
-        dbSession.commit();
-        return true;
-      } else {
+      double orderAmount = -newOrder.getAmount();
+      Position position = positionMapper.select(new Position(newOrder.getSymbol(), accountId));
+      if (position == null) {
         return false;
       }
-    } catch (Exception e) {
-      System.out.println("retry buy");
-      dbSession.close();
-      return insertSellOrder(newOrder, accountId);
+
+      Position offset = new Position(newOrder.getSymbol(), orderAmount, accountId);
+      positionMapper.updateRemovePosition(offset);
+
+      position = positionMapper.select(offset);
+
+      if (position.getAmount() >= 0) {
+        // insert into database
+        orderMapper.insert(newOrder);
+        return true;
+      } else {
+        positionMapper.updateAddPosition(offset);
+        return false;
+      }
     }
   }
 
