@@ -54,6 +54,34 @@ public class Client {
   }
 
   /**
+   * Method for sending sample create request to Client
+   */
+  public void runSampleCreateTest() throws IOException {
+    /*
+     * String msg = "Client is ready!"; theClient.sendToServer(msg); msg =
+     * (String)theClient.receiveFromServer(); System.out.println("Server sent: " +
+     * msg);
+     */
+    sendSampleCreateRequest();
+    String msg = (String) receiveResponseFromServer();
+    System.out.println("Server sent: " + msg);
+  }
+
+  /**
+   * Method for sending sample create request to Client
+   */
+  public void runSampleCreateTest(String accountID, String sym) throws IOException {
+    /*
+     * String msg = "Client is ready!"; theClient.sendToServer(msg); msg =
+     * (String)theClient.receiveFromServer(); System.out.println("Server sent: " +
+     * msg);
+     */
+    sendSampleCreateRequest(accountID, sym);
+    String msg = (String) receiveResponseFromServer();
+    System.out.println("Server sent: " + msg);
+  }
+
+  /**
    * method to receive anything from server
    * 
    * @return received object
@@ -95,18 +123,34 @@ public class Client {
     }
     return sb.toString();
   }
+
+  /**
+   * Method to send a sample create request to server
+   */
+  private void sendSampleCreateRequest() throws IOException {
+    String accountID = "123456";
+    String sym = "SPY";
+    sendSampleCreateRequest(accountID, sym);
+  }
+
+  /**
+   * Method to send a request
+   * @param accountID and symbol
+   */
+  private void sendSampleCreateRequest(String accountID, String sym) throws IOException {
+    String req = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<create>\n" + "<account id=\"" + accountID
+        + "\" balance=\"1000\"/>\n" + "<symbol sym=\"" + sym + "\">\n" + "<account id=\"" + accountID
+        + "\">100000</account>\n" + "</symbol>\n" + "</create>";
+        req = req.length() + "\n" + req;
+    PrintWriter out = new PrintWriter(theClientSocket.getOutputStream(), true);
+    out.println(req);
+  }
   
   /**
    * Method to send a request
    * @param xmlFile is name of xml file to use
    */
-  private void sendRequestToServer(String xmlFile) throws IOException {
-    /*
-    String req = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<create>\n"
-        + "<account id=\"123456\" balance=\"1000\"/>\n" + "<symbol sym=\"SPY\">\n"
-        + "<account id=\"123456\">100000</account>\n" + "</symbol>\n" + "</create>";
-    */
-    
+  private void sendRequestToServer(String xmlFile) throws IOException {  
     String req = readFile("orders/" + xmlFile);
     req = req.length() + "\n" + req;
     PrintWriter out = new PrintWriter(theClientSocket.getOutputStream(), true);
@@ -123,6 +167,7 @@ public class Client {
     String input;
     while ((input = in.readLine()) != null) {
       response.append(input);
+      response.append("\n");
     }
     return response.toString();
   }

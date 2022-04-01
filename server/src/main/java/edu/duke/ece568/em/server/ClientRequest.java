@@ -1,13 +1,18 @@
 package edu.duke.ece568.em.server;
 
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.io.StringReader;
+import java.io.StringWriter;
 import java.net.Socket;
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -17,6 +22,7 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
@@ -124,6 +130,7 @@ public class ClientRequest implements Runnable {
       while ((input = in.readLine()) != null) {
         requestSize--;
         request.append(input);
+        request.append("\n");
 
         // System.out.println("receieved: " + input + "\nsize so far: " +
         // request.length());
@@ -594,6 +601,7 @@ public class ClientRequest implements Runnable {
    */
   private void tryMatchOrder(Order newOrder) {
     if (newOrder.getAmount() < 0) { // sell order, look for buy order
+
       matchOrder(newOrder, true);
     } else { // buy order, look for sell order
       matchOrder(newOrder, false);
@@ -886,12 +894,27 @@ public class ClientRequest implements Runnable {
    */
   private void sendResponseToClient() {
     try {
+      // First convert the xml to string
       TransformerFactory transformerFactory = TransformerFactory.newInstance();
       Transformer transformer = transformerFactory.newTransformer();
       DOMSource source = new DOMSource(responseToClient);
-      OutputStream output = theClientSocket.getOutputStream();
-      StreamResult result = new StreamResult(output);
-      transformer.transform(source, result);
+      StringWriter writer = new StringWriter();
+      // pretty print
+      transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+      transformer.transform(source, new StreamResult(writer));
+      String xmlString = writer.getBuffer().toString();
+
+      // Add the size of the xml at the beginning
+      int lengthOfXML = xmlString.length();
+      xmlString = lengthOfXML + "\n" + xmlString;
+      System.out.println("Sending response: " + xmlString);
+
+      // get the output stream from the socket.
+      OutputStream outputStream = theClientSocket.getOutputStream();
+      // write the message we want to send
+      PrintWriter out = new PrintWriter(outputStream, true);
+      out.println(xmlString);
+      out.flush();
     } catch (Exception e) {
       System.out.println("Error in sending response to client: " + e.getMessage());
     }
