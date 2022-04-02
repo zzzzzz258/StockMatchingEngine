@@ -1,3 +1,4 @@
 I suppose all order tag has 3 attributes: sym, amount, limit. Not consider missing one of them.
 Based on the XMl parsing Library, we cannot ensure the attributes in order's results maintain the same order. Instead, I define the order to be id, sym, amount, limit.
 A parameter danger, there are 2 orderID(orderId) in ClientRequest.java
+Requirement definition: The server assumes that each client tries connecting to the server before sending any new request, and so closes the socket connection after processing the request and sending the response. For example, if a client first sends a <create> request and then sends a <transaction> request without making a new connection to the server, it'll get an error as the server closes the connection after processing the <create> request.
