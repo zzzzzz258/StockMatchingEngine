@@ -1,3 +1,5 @@
+create database stock_market;
+
 create table account (
 account_id varchar(10) primary key,
 balance double precision

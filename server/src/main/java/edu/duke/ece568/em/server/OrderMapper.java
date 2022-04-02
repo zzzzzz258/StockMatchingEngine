@@ -22,8 +22,8 @@ public interface OrderMapper {
   final String updateAmountStatusById = "update stock_order set status = #{status, typeHandler = org.apache.ibatis.type.EnumTypeHandler},  amount = #{amount} where order_id = #{orderId}";
   final String selectSellOrder = "select * from stock_order where symbol = #{symbol} and status = 'OPEN' and amount < 0 and limit_price <= #{limitPrice} and account_id != #{accountId} order by limit_price desc, time limit 1 for update";
   final String selectBuyOrder = "select * from stock_order where symbol = #{symbol} and status = 'OPEN' and amount > 0 and limit_price >= #{limitPrice} and account_id != #{accountId} order by limit_price asc, time limit 1 for update";
-
-
+  final String lockOrder = "update stock_order set status = 'COMPLETE' where order_id = #{orderId} and status='OPEN'";
+  final String freeLockedOrder = "update stock_order set status =#{status, typeHandler = org.apache.ibatis.type.EnumTypeHandler}, amount = #{amount} where order_id = #{orderId}";
   
   @Insert(insert)
   @Options(useGeneratedKeys = true, keyProperty = "orderId")
@@ -79,4 +79,15 @@ public interface OrderMapper {
   @Select(selectSellOrder)
   public Order selectSellOrder(Order order);
 
+  @Update(lockOrder)
+  public int lockOrder(Order order);
+
+  @Update(freeLockedOrder)
+  public void freeLockedOrder(Order order);
+
+  @Select("select * from stock_order where status = 'OPEN' and amount > 0 order by limit_price asc, time limit 1")
+  public Order selectBestBuyer();
+
+  @Select("select * from stock_order where status = 'OPEN' and amount < 0 order by limit_price desc, time limit 1")
+  public Order selectBestSeller();
 }

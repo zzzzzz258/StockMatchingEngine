@@ -66,9 +66,11 @@ public class Server {
     System.out.println("Starting Exchange Matching Server...");
     try {
       Server theExchangeServer = new Server(12345); // port# per the requirement
+      Thread meThread = new Thread(new MatchingEngine());
+      meThread.start();
+      
       theExchangeServer.acceptRequests();
-      theExchangeServer.closeServer();
-      ;
+      theExchangeServer.closeServer();      
     } catch (Exception e) {
       // print exception message about Throwable object
       e.printStackTrace();

@@ -18,6 +18,8 @@ public interface AccountMapper {
   final String insert = "insert into account (account_id, balance) values (#{accountId}, #{balance});";
   final String deleteAll = "delete from account";
   final String updateBalance = "update account set balance = #{balance} where account_id = #{accountId}";
+  final String updateAddBalance = "update account set balance = balance + #{balance} where account_id = #{accountId}";
+  final String updateRemoveBalance = "update account set balance = balance - #{balance} where account_id = #{accountId}";
   
   /**
    * select all data, mainly for testing
@@ -56,4 +58,11 @@ public interface AccountMapper {
 
   @Update(updateBalance)
   void updateBalance(Account account);
+
+  
+  @Update(updateAddBalance)
+  void updateAddBalance(Account account);
+  
+  @Update(updateRemoveBalance)
+  void updateRemoveBalance(Account account);
 }
