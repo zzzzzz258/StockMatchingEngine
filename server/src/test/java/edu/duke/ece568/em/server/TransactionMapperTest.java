@@ -9,7 +9,7 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 
 public class TransactionMapperTest {
-  @Test
+  //@Test
   public void test_all() {
     SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 

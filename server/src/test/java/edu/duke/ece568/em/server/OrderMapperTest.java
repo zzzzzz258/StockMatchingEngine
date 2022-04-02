@@ -35,7 +35,7 @@ public class OrderMapperTest {
     System.out.println(o11);
   }
 
-  @Test
+  //  @Test
   public void test_All() {
     SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 

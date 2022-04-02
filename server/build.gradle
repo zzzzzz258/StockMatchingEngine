@@ -4,6 +4,7 @@
 
 plugins {
     id 'edu.duke.ece568.em.java-application-conventions'
+    //id 'edu.duke.ece651.mp.java-application-conventions'
 }
 
 dependencies {
@@ -27,11 +28,11 @@ tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
 }
-task ensureResources() {
-  doLast {
-     String resourcesDir - "$projectDir/src/main/resources"
-     mkdir "$resourcesDir"
-  }
+jar {
+    manifest {
+        attributes 'Main-Class' : 'edu.duke.ece568.em.server.Server'
+//        attributes 'Class-Path' : configurations.compile.collect { 'lib/' + it.getName() }.join(' ')
+    }
 }
 test{
     testLogging{
@@ -42,7 +43,7 @@ test{
 clover{
     compiler {
         additionalArgs = "-g:lines,source,vars"
-        sourceCompatibility = '1.8'
-        targetCompatibility = '1.8'
+        //sourceCompatibility = '1.8'
+        //targetCompatibility = '1.8'
     }
 }

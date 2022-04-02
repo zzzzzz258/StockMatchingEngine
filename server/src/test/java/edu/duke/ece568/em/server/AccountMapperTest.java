@@ -10,7 +10,7 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 
 public class AccountMapperTest {
-  @Test
+  //@Test
   public void test_Everything() {
     SqlSessionFactory ssf = SingletonSQLFactory.getSqlSessionFactory();
 
