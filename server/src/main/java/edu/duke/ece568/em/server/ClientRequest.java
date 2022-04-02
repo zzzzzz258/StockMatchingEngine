@@ -825,13 +825,11 @@ public class ClientRequest implements Runnable {
    */
   private void addTransactions(String orderId, Element element) {
     // add executed rows
-    dbSession = this.getReadCommittedSession();
+    dbSession = this.getDefaultSession();
     TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
     List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
     addExecutedElements(element, transactions);
     addToResponse(element);
-
-    dbSession.close();
   }
 
   /**
