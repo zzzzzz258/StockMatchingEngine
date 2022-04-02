@@ -28,6 +28,12 @@ tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
 }
+jar {
+    manifest {
+        attributes 'Main-Class' : 'edu.duke.ece568.em.server.Server'
+//        attributes 'Class-Path' : configurations.compile.collect { 'lib/' + it.getName() }.join(' ')
+    }
+}
 test{
     testLogging{
         showStandardStreams=true
