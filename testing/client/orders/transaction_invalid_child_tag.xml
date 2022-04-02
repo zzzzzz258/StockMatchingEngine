@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<transactions id="123456">
+  <order sym="SYM" amount="AMT" limit="LMT"/>
+  <queri id="TRANS_ID"/>
+  <cancel id="TRANS_ID"/>
+</transactions>
