@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<create>
+  <account id="123456" balance="100000"/>
+  <symbol sym="TLSA">
+    <account id="123456">10000</account>
+  </symbol>
+  <account id="12345" balance="100000"/>
+  <symbol sym="TLSA">
+    <account id="12345">10000</account>
+  </symbol>
+</create>
