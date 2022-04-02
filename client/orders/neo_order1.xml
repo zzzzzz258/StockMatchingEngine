@@ -2,4 +2,5 @@
 <transactions id="123456">
   <order sym="TLSA" amount="100" limit="100"/>
   <order sym="TLSA" amount="100" limit="100"/>
+  <order sym="TLSA" amount="-100" limit="100"/>
 </transactions>

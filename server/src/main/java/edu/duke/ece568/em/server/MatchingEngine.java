@@ -24,9 +24,9 @@ public class MatchingEngine implements Runnable {
 
         Order buyer = orderMapper.selectBestBuyer();
         Order seller = orderMapper.selectBestSeller();
-        //System.out.println("buyer and seller  found");
+        //        System.out.println(buyer + "||" + seller);
         if (buyer != null && seller != null && buyer.getLimitPrice() >= seller.getLimitPrice()) {
-          System.out.println("DEALDEALDEALDAEL");
+          //System.out.println("DEALDEALDEALDAEL");
           double matchPrice = seller.getTime() < buyer.getTime() ? seller.getLimitPrice() : buyer.getLimitPrice();
           double matchAmount = Math.min(Math.abs(seller.getAmount()), Math.abs(buyer.getAmount()));
 
@@ -43,14 +43,16 @@ public class MatchingEngine implements Runnable {
 
           // add balance to account, add shraes to position
           addBalance(seller.getAccountId(), matchAmount * matchPrice);
+          //System.out.println("money got");
           addPosition(buyer.getAccountId(), buyer.getSymbol(), matchAmount);
+          //System.out.println("deal made");
           if (buyer.getLimitPrice() > matchPrice) { // refund
             addBalance(buyer.getAccountId(), matchAmount * (buyer.getLimitPrice() - matchPrice));
           }
         }
       } // end try
       catch (Exception e) {
-        // System.out.println(e.getMessage());
+         System.out.println(e.getMessage());
       }
     }// end while
   }
@@ -88,7 +90,7 @@ public class MatchingEngine implements Runnable {
         Position offset = new Position(symbol, amount, accountId);
         Position position = positionMapper.select(offset);
         if (position == null) {
-          positionMapper.insert(position);
+          positionMapper.insert(offset);
         } else {
           positionMapper.updateAddPosition(offset);
         }
@@ -96,6 +98,7 @@ public class MatchingEngine implements Runnable {
         return;
       }
       catch (Exception e) {
+        //        System.out.println(e.getMessage());
       }
     }
   }

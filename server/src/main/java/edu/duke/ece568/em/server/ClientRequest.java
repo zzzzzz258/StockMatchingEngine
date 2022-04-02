@@ -269,12 +269,7 @@ public class ClientRequest implements Runnable {
 
         if (tempNodeName.equals("order")) {
           // put order into db
-          Order newOrder = addOrder(tempNode, accountId);
-          if (newOrder != null) {
-            // real insert order happen in try match order TODO
-            tryMatchOrder(newOrder);
-          }
-
+          addOrder(tempNode, accountId);
         } else if (tempNodeName.equals("cancel")) {
           cancelOrder(tempNode, accountId);
         } else if (tempNodeName.equals("query")) {
@@ -344,25 +339,34 @@ public class ClientRequest implements Runnable {
       addErrorToResponse(errorElement, id, null, "Invalid request");
 
     } else {
-      try (SqlSession dbSession = this.getDefaultSession()) {
-        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
-        accountMapper.insert(new Account(id, Double.parseDouble(balance)));
-
-        System.out.println(id + " insereted");
-        Element successElement = responseToClient.createElement("created");
-        addSuccessToResponse(successElement, id, null);
-      } catch (Exception e) {
-        Element errorElement = responseToClient.createElement("error");
-        addErrorToResponse(errorElement, id, null, e.getMessage());
-      }
+      safeInsertAccount(new Account(id, Double.parseDouble(balance)));
+      Element successElement = responseToClient.createElement("created");
+      addSuccessToResponse(successElement, id, null);      
     }
   }
 
-  private Account getAccount(String accountId) {
-    try (SqlSession session = this.getDefaultSession()) {
-      AccountMapper accountMapper = session.getMapper(AccountMapper.class);
-      return accountMapper.selectOneById(accountId);
-    }
+  private void safeInsertAccount(Account account) {
+    while (true) {
+      try (SqlSession session = this.getReadCommittedSession()) {
+        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+        while (true) {
+          try {
+            Account existedAccount = accountMapper.selectOneById(account.getAccountId());
+            if (existedAccount == null) {
+              accountMapper.insert(account);
+            }
+            else {
+              accountMapper.updateAddBalance(account);
+            }
+            session.commit();
+            return;
+          } // end try
+          catch (Exception e) {
+          } // end catch
+        } // end while
+
+      }
+    } // end while
   }
 
   /**
@@ -373,22 +377,27 @@ public class ClientRequest implements Runnable {
    * @param the xml document
    */
   private boolean checkAccountIdInTransaction(String accountId) {
-    dbSession = this.getReadCommittedSession();
     if (accountId.isEmpty()) {
       // transactions order must have a account id attribute in root tag
       Element errorElement = responseToClient.createElement("error");
       addErrorToResponse(errorElement, accountId, null, "account id not found");
       return false;
     }
-    AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
-    Account account = accountMapper.selectOneById(accountId);
-    dbSession.close();
-    if (account == null) {
-      Element errorElement = responseToClient.createElement("error");
-      addErrorToResponse(errorElement, accountId, null, "given account does not exist");
-      return false;
-    }
-    return true;
+    while (true) {
+      try (SqlSession dbSession = this.getDefaultSession()) {
+        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+        Account account = accountMapper.selectOneById(accountId);
+
+        if (account == null) {
+          Element errorElement = responseToClient.createElement("error");
+          addErrorToResponse(errorElement, accountId, null, "given account does not exist");
+          return false;
+        }
+        return true;
+      } // end try
+      catch (Exception e) {
+      }
+    } // end while
   }
 
   /**
@@ -496,28 +505,71 @@ public class ClientRequest implements Runnable {
    * @return true if order placed successfully
    */
   private boolean insertBuyOrder(Order newOrder, String accountId) {
-    try (SqlSession dbSession = this.getDefaultSession()) {
-      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-      AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+    double orderAmount = newOrder.getAmount();
+    double orderPrice = newOrder.getLimitPrice();
+    double totalCost = orderAmount * orderPrice;
 
-      double orderAmount = newOrder.getAmount();
-      double orderPrice = newOrder.getLimitPrice();
-      double totalCost = orderAmount * orderPrice;
+    Account offset = new Account(accountId, totalCost);
+    safeUpdateRemoveBalace(offset);
+    Account account = safeSelectAccountById(accountId);
 
-      Account offset = new Account(accountId, totalCost);
-      accountMapper.updateRemoveBalance(offset);
-      Account account = accountMapper.selectOneById(accountId);
+    double currentBalance = account.getBalance();
 
-      double currentBalance = account.getBalance();
+    if (currentBalance < 0) {
+      // update account balance
+      safeUpdateAddBalace(offset);
+      return false;
+    } else {
+      // insert into database
+      safeInsertOrder(newOrder);
+      return true;
+    }
+  }
 
-      if (currentBalance < 0) {
-        // update account balance
+  private void safeUpdateRemoveBalace(Account offset) {
+    while (true) {
+      try (SqlSession session = this.getDefaultSession()) {
+        AccountMapper accountMapper = session.getMapper(AccountMapper.class);
+        accountMapper.updateRemoveBalance(offset);
+        return;
+      } // end try
+      catch (Exception e) {
+      }
+    }
+  }
+
+  private void safeUpdateAddBalace(Account offset) {
+    while (true) {
+      try (SqlSession session = this.getDefaultSession()) {
+        AccountMapper accountMapper = session.getMapper(AccountMapper.class);
         accountMapper.updateAddBalance(offset);
-        return false;
-      } else {
-        // insert into database
-        // orderMapper.insert(newOrder);
-        return false;
+        return;
+      } // end try
+      catch (Exception e) {
+      }
+    }
+  }
+
+  private Account safeSelectAccountById(String accountId) {
+    while (true) {
+      try (SqlSession session = this.getDefaultSession()) {
+        AccountMapper accountMapper = session.getMapper(AccountMapper.class);
+        Account account = accountMapper.selectOneById(accountId);
+        return account;
+      } // end try
+      catch (Exception e) {
+      }
+    }
+  }
+
+  private void safeInsertOrder(Order order) {
+    while (true) {
+      try (SqlSession session = this.getDefaultSession()) {
+        OrderMapper orderMapper = session.getMapper(OrderMapper.class);
+        orderMapper.insert(order);
+        return;
+      } // end try
+      catch (Exception e) {
       }
     }
   }
@@ -528,28 +580,59 @@ public class ClientRequest implements Runnable {
    * @return true if order placed
    */
   private boolean insertSellOrder(Order newOrder, String accountId) {
-    try (SqlSession dbSession = this.getDefaultSession()) {
-      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-      PositionMapper positionMapper = dbSession.getMapper(PositionMapper.class);
-
       double orderAmount = -newOrder.getAmount();
-      Position position = positionMapper.select(new Position(newOrder.getSymbol(), accountId));
+      Position position = safeSelectPosition(new Position(newOrder.getSymbol(), accountId));
       if (position == null) {
         return false;
       }
 
       Position offset = new Position(newOrder.getSymbol(), orderAmount, accountId);
-      positionMapper.updateRemovePosition(offset);
+      safeUpdateRemovePosition(offset);
 
-      position = positionMapper.select(offset);
+      position = safeSelectPosition(offset);
 
       if (position.getAmount() >= 0) {
         // insert into database
-        // orderMapper.insert(newOrder);
+        safeInsertOrder(newOrder);
         return true;
       } else {
-        positionMapper.updateAddPosition(offset);
+        safeUpdateAddPosition(offset);
         return false;
+      }    
+  }
+
+  private void safeUpdateRemovePosition(Position offset) {
+    while (true) {
+      try (SqlSession session = this.getDefaultSession()) {
+        PositionMapper positionMapper = session.getMapper(PositionMapper.class);
+        positionMapper.updateRemovePosition(offset);
+        return;
+      } // end try
+      catch (Exception e) {
+      }
+    }
+  }
+
+  private void safeUpdateAddPosition(Position offset) {
+    while (true) {
+      try (SqlSession session = this.getDefaultSession()) {
+        PositionMapper positionMapper = session.getMapper(PositionMapper.class);
+        positionMapper.updateAddPosition(offset);
+        return;
+      } // end try
+      catch (Exception e) {
+      }
+    }
+  }
+
+  private Position safeSelectPosition(Position position) {
+    while (true) {
+      try (SqlSession session = this.getDefaultSession()) {
+        PositionMapper positionMapper = session.getMapper(PositionMapper.class);
+        position = positionMapper.select(position);
+        return position;
+      } // end try
+      catch (Exception e) {
       }
     }
   }
@@ -583,92 +666,6 @@ public class ClientRequest implements Runnable {
   }
 
   /**
-   * Method to try to find matching order of new order
-   *
-   * @param newOrder is new order
-   */
-  private void tryMatchOrder(Order newOrder) {
-    if (newOrder.getAmount() < 0) { // sell order, look for buy order
-      matchOrder(newOrder, true);
-    } else { // buy order, look for sell order
-      matchOrder(newOrder, false);
-    }
-  }
-
-  /**
-   * Method to match and execute sell order
-   */
-  private void matchOrder(Order newOrder, boolean ifSell) {
-    try (SqlSession dbSession = this.getDefaultSession()) {
-      OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
-      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
-      List<Transaction> transactionsList = new ArrayList<Transaction>();
-      while (newOrder.getStatus() == Status.OPEN) {
-        // find matching order and lock it
-        Order candidate = ifSell ? orderMapper.selectSellOrder(newOrder) : orderMapper.selectBuyOrder(newOrder);
-        if (candidate == null) {
-          break; // matching over
-        }
-        if (orderMapper.lockOrder(candidate) == 0) {
-          continue; // conflict, research candidate
-        }
-        // do business
-
-        Order seller = ifSell ? newOrder : candidate;
-        Order buyer = ifSell ? candidate : newOrder;
-
-        double matchPrice = seller.getTime() < buyer.getTime() ? seller.getLimitPrice() : buyer.getLimitPrice();
-        double matchAmount = Math.min(Math.abs(seller.getAmount()), Math.abs(buyer.getAmount()));
-
-        Transaction sellTransaction = doSellBusiness(seller, matchAmount, matchPrice);
-        Transaction buyTransaction = doBuyBusiness(buyer, matchAmount, matchPrice);
-
-        transactionsList.add(sellTransaction);
-        transactionsList.add(buyTransaction);
-
-        if (newOrder.getAmount() == 0)
-          newOrder.setStatus(Status.COMPLETE);
-        if (candidate.getAmount() > 0)
-          buyer.setStatus(Status.OPEN);
-
-        // release candidate
-        orderMapper.freeLockedOrder(candidate);
-
-        // add balance to account, add shraes to position
-        addBalance(newOrder.getAccountId(), matchAmount * matchPrice);
-        addPosition(newOrder.getAccountId(), newOrder.getSymbol(), matchAmount);
-        if (buyer.getLimitPrice() > matchPrice) { // refund
-          addBalance(newOrder.getAccountId(), matchAmount * (buyer.getLimitPrice() - matchPrice));
-        }
-      }
-
-      // real insert order
-      orderMapper.insert(newOrder);      
-      // insert transactions
-      for (Transaction t : transactionsList) {
-        transactionMapper.insert(t);
-      }
-    }
-  }
-
-  /**
-   * Method to do logics in buy operation
-   */
-  private Transaction doBuyBusiness(Order order, double amount, double price) {
-    order.setAmount(order.getAmount() - amount);
-    return new Transaction(order.getOrderId(), amount, price);
-  }
-
-  /**
-   * Method to de logics in sell operation
-   */
-  private Transaction doSellBusiness(Order order, double amount, double price) {
-    // update amount in order, and account's balance
-    order.setAmount(order.getAmount() + amount);
-    return new Transaction(order.getOrderId(), -amount, price);
-  }
-
-  /**
    * Method to add shares to a position
    */
   private void addPosition(String accountId, String symbol, double amount) {
@@ -688,23 +685,30 @@ public class ClientRequest implements Runnable {
    * method to add balance to account
    */
   private void addBalance(String accountId, double balance) {
-    try (SqlSession dbSession = this.getDefaultSession()) {
-      AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
-      Account offset = new Account(accountId, balance);
-      accountMapper.updateAddBalance(offset);
-    }
+    while (true) {
+      try (SqlSession dbSession = this.getDefaultSession()) {
+        AccountMapper accountMapper = dbSession.getMapper(AccountMapper.class);
+        Account offset = new Account(accountId, balance);
+        accountMapper.updateAddBalance(offset);
+        return;
+      } catch (Exception e) {
+      }
+    } // end while
   }
 
   /**
    * Method to insert a transaction to db
    */
   private void insertTransaction(Transaction transaction) {
-    try (SqlSession dbSession = this.getDefaultSession()) {
-      TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
-      transactionMapper.insert(transaction);
-    } catch (Exception e) {
-      System.out.println("Error ocurred in inserting transaction");
-      System.out.println(e.getStackTrace());
+    while (true) {
+      try (SqlSession dbSession = this.getDefaultSession()) {
+        TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+        transactionMapper.insert(transaction);
+        return;
+      } catch (Exception e) {
+        System.out.println("Error ocurred in inserting transaction");
+        System.out.println(e.getStackTrace());
+      } // end catch
     }
   }
 
@@ -729,7 +733,7 @@ public class ClientRequest implements Runnable {
    * Method to try to cancel an order
    *
    * @return true if canceled or complete, false if order and account no match
-   */
+   */ // TODO
   private boolean tryCancel(String orderId, String accountId, Element canceled) {
     while (true) {
       try {
@@ -825,11 +829,16 @@ public class ClientRequest implements Runnable {
    */
   private void addTransactions(String orderId, Element element) {
     // add executed rows
-    dbSession = this.getDefaultSession();
-    TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
-    List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
-    addExecutedElements(element, transactions);
-    addToResponse(element);
+    while (true) {
+      try (SqlSession dbSession = this.getDefaultSession()) {
+        TransactionMapper transactionMapper = dbSession.getMapper(TransactionMapper.class);
+        List<Transaction> transactions = transactionMapper.selectByOrderId(Integer.parseInt(orderId));
+        addExecutedElements(element, transactions);
+        addToResponse(element);
+        return;
+      } catch (Exception e) {
+      }
+    } // end while
   }
 
   /**

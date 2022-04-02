@@ -5,7 +5,7 @@ import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
 public class ClientFunctionality {
-  final int numOfThreads = 10;
+  final int numOfThreads = 1000;
   final CyclicBarrier barrier = new CyclicBarrier(numOfThreads, new scalabilityCalculator());
 
   class scalabilityCalculator implements Runnable {
