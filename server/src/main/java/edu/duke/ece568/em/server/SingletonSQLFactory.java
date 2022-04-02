@@ -70,7 +70,7 @@ public class SingletonSQLFactory {
       DataSource dataSource = MyDataSourceFactory.getDataSource("org.postgresql.Driver", "jdbc:postgresql:stock_market",
           "postgres", "ece568hw4");
 
-      TransactionFactory transactionFactory = new JdbcTransactionFactory(dataSource, TransactionIsolationLevel.SERIALIZABLE, true);
+      TransactionFactory transactionFactory = new JdbcTransactionFactory();
       Environment environment = new Environment("development", transactionFactory, dataSource);
       Configuration configuration = new Configuration(environment);
       configuration.addMapper(AccountMapper.class);

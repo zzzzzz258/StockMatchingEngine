@@ -84,4 +84,10 @@ public interface OrderMapper {
 
   @Update(freeLockedOrder)
   public void freeLockedOrder(Order order);
+
+  @Select("select * from stock_order where status = 'OPEN' and amount > 0 order by limit_price asc, time limit 1")
+  public Order selectBestBuyer();
+
+  @Select("select * from stock_order where status = 'OPEN' and amount < 0 order by limit_price desc, time limit 1")
+  public Order selectBestSeller();
 }
