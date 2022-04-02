@@ -5,9 +5,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.bmuschko:gradle-clover-plugin:3.0.3'
-    }
-
-    
+    }   
 }
 
 allprojects{
@@ -24,8 +22,8 @@ clover{
     compiler {
         additionalArgs = "-g:lines,source,vars"
 
-        sourceCompatibility = '1.8'
-        targetCompatibility = '1.8'
+        //sourceCompatibility = '1.8'
+        //targetCompatibility = '1.8'
     }
     report {
         xml=true
@@ -48,6 +46,7 @@ task resolveDependencies {
        }
    }
 }
+
 
 tasks.register("run-server") {
     dependsOn project('server').getTasksByName('run', false)
