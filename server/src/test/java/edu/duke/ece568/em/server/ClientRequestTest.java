@@ -16,7 +16,7 @@ public class ClientRequestTest {
     }
   }
   
-  @Test
+  //@Test
   public void test_processTransactionRequest() throws IOException, InterruptedException {
     Thread th = new Thread() {
         @Override

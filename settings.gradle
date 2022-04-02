@@ -7,5 +7,5 @@
  * in the user manual at https://docs.gradle.org/7.3.3/userguide/multi_project_builds.html
  */
 
-rootProject.name = 'ece568-hw4'
+rootProject.name = 'erss-hwk4-ahc35-zz258'
 include('client', 'server', 'common')
