@@ -736,9 +736,7 @@ public class ClientRequest implements Runnable {
    */ // TODO
   private boolean tryCancel(String orderId, String accountId, Element canceled) {
     while (true) {
-      try {
-        dbSession = this.getReadCommittedSession();
-
+      try (SqlSession dbSession = this.getReadCommittedSession()) {
         OrderMapper orderMapper = dbSession.getMapper(OrderMapper.class);
         Order order = orderMapper.selectByIdL(Integer.parseInt(orderId));
 
@@ -766,7 +764,6 @@ public class ClientRequest implements Runnable {
             double returnShares = order.getAmount();
             addPosition(accountId, order.getSymbol(), returnShares);
           }
-
           addCanceledElement(canceled, Math.abs(order.getAmount()), order.getTime());
           return true;
         } // endif

@@ -5,7 +5,7 @@ import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
 public class ClientFunctionality {
-  final int numOfThreads = 1000;
+  final int numOfThreads = 10;
   final CyclicBarrier barrier = new CyclicBarrier(numOfThreads, new scalabilityCalculator());
 
   class scalabilityCalculator implements Runnable {
@@ -37,12 +37,13 @@ public class ClientFunctionality {
       int portNum = 12345;
       try {
         NeoClient theClient = new NeoClient(hostname, portNum);
-        //theClient.runSampleCreateTest("neo_cancel.xml");
-        if (System.currentTimeMillis()%2 == 0) {
+        theClient.runSampleCreateTest("neo_cancel.xml");
+        /*if (System.currentTimeMillis()%2 == 0) {
           theClient.runSampleCreateTest("neo_order1.xml");}
         else {
           theClient.runSampleCreateTest("neo_order2.xml");
           }
+        */
       } catch (Exception e) {
         System.out.println("Error in connecting to server: " + e.getMessage());
       }
