@@ -19,8 +19,8 @@ dependencies {
 application {
     // Define the main class for the application.
 
-    //mainClass = 'edu.duke.ece568.em.client.ClientFunctionality'
-    mainClass = 'edu.duke.ece568.em.client.MultiClient'
+    mainClass = 'edu.duke.ece568.em.client.ClientFunctionality'
+    //mainClass = 'edu.duke.ece568.em.client.MultiClient'
 }
 tasks.named('test') {
     // Use JUnit Platform for unit tests.

@@ -48,7 +48,8 @@ public class MultiClient {
 
     @Override
     public void run() {
-      String hostname = "127.0.0.1";
+      //String hostname = "127.0.0.1";
+      String hostname = "0.0.0.0";
       int portNum = 12345;
       try {
         Client theClient = new Client(hostname, portNum);
